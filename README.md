@@ -13,9 +13,11 @@ of code. Includes:
 
 Toys runs in **192KB of RAM** and uses less than **192KB of disk**, in a 1MB
 partition (this includes 48KB of compiled code, and 106KB of source code). The
-compressed bootable disk image fits in 64KB. This is a port to x86_64 of
-the [original version](https://github.com/ebruneton/toypc), which was written
-for an ARM-v7M micro-controller.
+compressed bootable
+[disk image](https://github.com/ebruneton/toys/releases/download/v1.0/toys-1.0-amd64.img.gz)
+fits in 64KB. This is a port to x86_64 of the
+[original version](https://github.com/ebruneton/toypc), which was written for an
+ARM-v7M micro-controller.
 
 ## Running
 
@@ -59,9 +61,10 @@ In particular, Toys requires a 100x31 console mode.
 
 #### Running
 
-- Download and uncompress the Toys bootable disk image, or build one
-  from source code with `make image` (requires gcc and make; the result is in
-  `bin/toys-1.0-amd64.img`).
+- Download and uncompress the Toys bootable
+  [disk image](https://github.com/ebruneton/toys/releases/download/v1.0/toys-1.0-amd64.img.gz),
+  or build one from source code with `make image` (requires gcc and make; the
+  result is in `bin/toys-1.0-amd64.img`).
 - Flash this disk image on an USB stick. On Ubuntu, this can be done with
   [`gnome-disks --restore-disk-image`](https://manpages.ubuntu.com/manpages/focal/man1/gnome-disks.1.html).
 - Reboot your computer and boot from the USB stick (you might need to disable

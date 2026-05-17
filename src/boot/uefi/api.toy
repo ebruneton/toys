@@ -1,0 +1,51 @@
+struct Fn {}
+
+struct SimpleTextInputProtocol {
+  reset: &Fn,
+  read_key_stroke: &Fn,
+  wait_for_key: u64
+}
+
+struct SimpleTextOutputProtocol {
+  reset: &Fn,
+  output_string: &Fn,
+  test_string: &Fn,
+  query_mode: &Fn,
+  set_mode: &Fn,
+  set_attribute: &Fn,
+  clear_screen: &Fn,
+  set_cursor_position: &Fn,
+  enable_cursor: &Fn,
+  mode: &u64
+}
+
+struct BlockIoProtocol {
+  revision: u64,
+  media: &u64,
+  reset: &Fn,
+  read_blocks: &Fn,
+  write_blocks: &Fn,
+  flush_blocks: &Fn
+}
+
+struct SystemTable {
+  signature: u64,
+  revision_and_size: u64,
+  crc32: u64,
+  firmware_vendor: u64,
+  firmware_revision: u64,
+  console_in_handle: u64,
+  con_in: &SimpleTextInputProtocol,
+  console_out_handle: u64,
+  con_out: &SimpleTextOutputProtocol,
+  standard_error_handle: u64,
+  sdt_err: &SimpleTextOutputProtocol,
+  runtime_services: &&Fn,
+  boot_services: &&Fn
+}
+
+fn efi_call1(fn1: &Fn, a: u64) -> u64;
+fn efi_call2(fn2: &Fn, a: u64, b: u64) -> u64;
+fn efi_call3(fn3: &Fn, a: u64, b: u64, c: u64) -> u64;
+fn efi_call4(fn4: &Fn, a: u64, b: u64, c: u64, d: u64) -> u64;
+fn efi_call5(fn5: &Fn, a: u64, b: u64, c: u64, d: u64, e: u64) -> u64;

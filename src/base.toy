@@ -3,16 +3,18 @@ fn main(args: &u64, args_end: &u64, heap: &u64, heap_limit: &u64) -> u64;
 fn exit(result: u64) -> u64;
 
 fn entry(heap: &u64, heap_limit: &u64) {
-  let args = heap + 4;
+  let args = heap + 8;
   let args_end = args + *heap;
-  heap = (((args_end as u64 + 3) >> 2) << 2) as &u64;
+  heap = (((args_end as u64 + 7) >> 3) << 3) as &u64;
   exit(main(args, args_end, heap, heap_limit));
 }
 
-fn load8(ptr: &u64) -> u64 [ /*LDRB_R0_R0_0*/30720; /*MOV_PC_LR*/18167; ]
-fn load16(ptr: &u64) -> u64 [ /*LDRH_R0_R0_0*/34816; /*MOV_PC_LR*/18167; ]
-fn store8(ptr: &u64, value: u64) [ /*STRB_R1_R0_0*/28673; /*MOV_PC_LR*/18167; ]
-fn store16(ptr: &u64, value: u64) [ /*STRH_R1_R0_0*/32769; /*MOV_PC_LR*/18167; ]
+fn load8(ptr: &u64) -> u64  [ 69,15,182,0, /*movzxb r8d,[r8]*/ 195 /*ret*/ ]
+fn load16(ptr: &u64) -> u64 [ 69,15,183,0, /*movzxw r8d,[r8]*/ 195 /*ret*/ ]
+fn load32(ptr: &u64) -> u64 [ 69,139,0,    /*mov r8d,[r8] */   195 /*ret*/ ]
+fn store8(ptr: &u64, value: u64)  [ 69,136,8,     /*mov [r8],r9b*/ 195 /*ret*/ ]
+fn store16(ptr: &u64, value: u64) [ 102,69,137,8, /*mov [r8],r9w*/ 195 /*ret*/ ]
+fn store32(ptr: &u64, value: u64) [ 69,137,8,     /*mov [r8],r9d*/ 195 /*ret*/ ]
 
 fn sh_read_token(src_p: &&u64, src_end: &u64, length: &u64) -> &u64 {
   let src = *src_p;
@@ -26,8 +28,8 @@ fn sh_read_token(src_p: &&u64, src_end: &u64, length: &u64) -> &u64 {
 }
 
 fn system_call(id: u64, args: &u64) -> u64 [
-  /*SVC*/ 57088;
-  /*MOV_PC_LR*/ 18167;
+  15, 5, /*syscall*/
+  195    /*ret*/
 ]
 
 const OK: u64 = 0;
@@ -38,7 +40,7 @@ const ALREADY_EXISTS: u64 = 4;
 const OUT_OF_MEMORY: u64 = 5;
 const INTERNAL_ERROR: u64 = 6;
 
-fn status(result: u64) -> u64 { return result >> 24; }
+fn status(result: u64) -> u64 { return result >> 56; }
 
 fn spawn(dst: &u64, name: &u64, name_length: u64,
     args: &u64, args_length: u64, output_p: &&u64) -> u64 {
@@ -82,6 +84,7 @@ fn delete(name: &u64, length: u64) -> u64 {
   return system_call(8, &name as &u64);
 }
 
-fn reboot(mode: u64) -> u64 {
-  return system_call(9, &mode);
+fn reboot() -> u64 {
+  let unused = 0;
+  return system_call(9, &unused as &u64);
 }

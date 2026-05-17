@@ -23,7 +23,7 @@ fn command_copy(src: &Command, dst: &Command) {
 
 fn sh_new(heap_p: &&u64, heap_limit: &u64) -> &Shell {
   let shell = mem_allocate(sizeof(Shell), heap_p, heap_limit) as &Shell;
-  let command_size = sizeof(Command) - 4 + MAX_COMMAND_LENGTH;
+  let command_size = sizeof(Command) - 8 + MAX_COMMAND_LENGTH;
   let command =
       mem_allocate(NUM_COMMANDS * command_size, heap_p, heap_limit) as &Command;
   let output = mem_allocate(MAX_OUTPUT_SIZE, heap_p, heap_limit);
@@ -122,7 +122,7 @@ fn sh_run_script(self: &Shell, name: &u64, length: u64) -> u64 {
   return status(n);
 }
 
-fn sh_draw_string(src: &u64, src_end: &u64, col: u64, row: &u64) {
+fn sh_draw_string(src: &u64, src_end: &u64, col: u64, row: &u64, draw_cursor: u64) {
   let c = 0;
   while src < src_end {
     c = load8(src);
@@ -137,42 +137,42 @@ fn sh_draw_string(src: &u64, src_end: &u64, col: u64, row: &u64) {
       gpu_set_cursor(col, *row);
     }
   }
+  if draw_cursor != 0 { gpu_draw_cursor(col, *row); }
 }
 
-fn sh_draw_command(command: &Command, row: &u64) {
+fn sh_draw_command(command: &Command, row: &u64, draw_cursor: u64) {
   gpu_draw_char('>');
-  sh_draw_string(&command.data, &command.data + command.length, 1, row);
+  sh_draw_string(&command.data, &command.data + command.length, 1, row, draw_cursor);
   *row = *row + 1;
 }
 
 fn sh_draw(self: &Shell, current_command: &Command) {
   gpu_clear_screen();
   gpu_set_cursor(0, 0);
-  gpu_set_color(0, 7, 0);
+  gpu_set_color(GREEN);
   let row = 0;
   if current_command.previous.length > 0 {
-    sh_draw_command(current_command.previous, &row);
+    sh_draw_command(current_command.previous, &row, 0);
     gpu_set_cursor(0, row);
   }
   if self.output_end > self.output_begin {
-    gpu_set_color(7, 7, 0);
-    sh_draw_string(self.output_begin, self.output_end, 0, &row);
+    gpu_set_color(YELLOW);
+    sh_draw_string(self.output_begin, self.output_end, 0, &row, 0);
     gpu_set_cursor(0, row);
-    gpu_set_color(0, 7, 0);
+    gpu_set_color(GREEN);
   }
-  sh_draw_command(current_command, &row);
+  sh_draw_command(current_command, &row, 1);
   gpu_switch_buffer();
 }
 
 const BACKSPACE_KEY: u64 = 8;
 const ENTER_KEY: u64 = 10;
-const ESCAPE_KEY: u64 = 27;
+const ESCAPE_KEY: u64 = 151;
 const DELETE_KEY: u64 = 127;
-const ARROW_UP_KEY: u64 = 245;
-const ARROW_DOWN_KEY: u64 = 242;
+const ARROW_UP_KEY: u64 = 129;
+const ARROW_DOWN_KEY: u64 = 130;
 
 fn sh_run_editor(self: &Shell) -> u64 {
-  gpu_set_double_buffer();
   let current = self.commands;
   let history = current;
   let c = 0;
@@ -180,13 +180,10 @@ fn sh_run_editor(self: &Shell) -> u64 {
     sh_draw(self, current);
     read(STANDARD_INPUT, &c, 1);
     if c == ESCAPE_KEY {
-      gpu_set_single_buffer();
       exit(OK);
-      gpu_set_double_buffer();
     } else if c == ENTER_KEY {
       self.output_end = self.output_begin;
       sh_run(self, &current.data, &current.data + current.length);
-      gpu_set_double_buffer();
       current = current.next;
       current.length = 0;
       history = current;

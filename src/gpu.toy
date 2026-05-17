@@ -1,49 +1,37 @@
+const BLACK: u64 = 0;
+const BLUE: u64 = 1;
+const GREEN: u64 = 2;
+const CYAN: u64 = 3;
+const RED: u64 = 4;
+const MAGENTA: u64 = 5;
+const LIGHTGRAY: u64 = 7;
+const YELLOW: u64 = 14;
+
 fn gpu_set_register(id: u64, value: u64) {
-  let buffer = (value & 255) << 16 | (32768 /*Select Register*/ | id);
-  write(GPU, &buffer, 4);
-}
-
-fn gpu_set_double_buffer() {
-  gpu_set_register(32 /*Display Configuration*/, 128);
-  gpu_set_register(65 /*Memory Write Control 1*/, 1);
-}
-
-fn gpu_set_single_buffer() {
-  gpu_set_register(65 /*Memory Write Control 1*/, 0);
-  gpu_set_register(82 /*Layer Transparency 0*/, 0);
-  gpu_set_register(32 /*Display Configuration*/, 0);
+  let buffer = value << 8 | id;
+  write(GPU, &buffer, 3);
 }
 
 fn gpu_switch_buffer() {
-  let buffer = 32768 /*Select Register*/ | 65 /*Memory Write Control 1*/;
-  write(GPU, &buffer, 2);
-  let layer = 0;
-  read(GPU, &layer, 1);
-  buffer = /*0 (Write Data) | */ 1 - layer;
-  write(GPU, &buffer, 2);
-  gpu_set_register(82 /*Layer Transparency 0*/, layer);
+  gpu_set_register(5 /*Switch Buffer*/, 0);
 }
 
 fn gpu_clear_screen() {
-  gpu_set_register(142 /*Memory Clear Control*/, 192);
-  let buffer = 0;
-  loop {
-    read(GPU, &buffer, 1);
-    if buffer & 128 == 0 { return; }
-  }
+  gpu_set_register(4 /*Clear Screen*/, 0);
 }
 
 fn gpu_set_cursor(col: u64, row: u64) {
-  gpu_set_register(42 /*Font Write Cursor H Position 0*/, col << 3);
-  gpu_set_register(43 /*Font Write Cursor H Position 1*/, col >> 5);
-  gpu_set_register(44 /*Font Write Cursor V Position 0*/, row << 4);
-  gpu_set_register(45 /*Font Write Cursor V Position 1*/, row >> 4);
+  gpu_set_register(1 /*Set Cursor*/, row << 8 | col);
 }
 
-fn gpu_set_color(r: u64, g: u64, b: u64) {
-  gpu_set_register(99 /*Foreground Color 0*/, r);
-  gpu_set_register(100 /*Foreground Color 1*/, g);
-  gpu_set_register(101 /*Foreground Color 2*/, b);
+fn gpu_draw_cursor(col: u64, row: u64) {
+  gpu_set_register(2 /*Draw Cursor*/, row << 8 | col);
 }
 
-fn gpu_draw_char(c: u64) { gpu_set_register(2, c); }
+fn gpu_set_color(color: u64) {
+  gpu_set_register(3 /*Color*/, color);
+}
+
+fn gpu_draw_char(c: u64) {
+  gpu_set_register(0 /*Draw Char*/, c);
+}

@@ -1,9 +1,9 @@
 fn mem_copy(src: &u64, dst: &u64, n: u64) {
   let i = 0;
   if dst < src {
-    while i + 4 <= n {
+    while i + 8 <= n {
       *(dst + i) = *(src + i);
-      i = i + 4;
+      i = i + 8;
     }
     while i < n {
       store8(dst + i, load8(src + i));
@@ -11,8 +11,8 @@ fn mem_copy(src: &u64, dst: &u64, n: u64) {
     }
   } else {
     i = n;
-    while i >= 4 {
-      i = i - 4;
+    while i >= 8 {
+      i = i - 8;
       *(dst + i) = *(src + i);
     }
     while i > 0 {
@@ -22,16 +22,16 @@ fn mem_copy(src: &u64, dst: &u64, n: u64) {
   }
 }
 
-const ARROW_DOWN_KEY: u64 = 242;
-const ARROW_LEFT_KEY: u64 = 235;
-const ARROW_RIGHT_KEY: u64 = 244;
-const ARROW_UP_KEY: u64 = 245;
+const ARROW_DOWN_KEY: u64 = 130;
+const ARROW_LEFT_KEY: u64 = 132;
+const ARROW_RIGHT_KEY: u64 = 131;
+const ARROW_UP_KEY: u64 = 129;
 const BACKSPACE_KEY: u64 = 8;
 const DELETE_KEY: u64 = 127;
 const ENTER_KEY: u64 = 10;
-const ESCAPE_KEY: u64 = 27;
-const PAGE_DOWN_KEY: u64 = 250;
-const PAGE_UP_KEY: u64 = 253;
+const ESCAPE_KEY: u64 = 151;
+const PAGE_DOWN_KEY: u64 = 138;
+const PAGE_UP_KEY: u64 = 137;
 const TAB_KEY: u64 = 9;
 
 fn ted_set_cursor(begin: &u64, cursor: &u64, gap: u64, new_cursor: &u64) -> &u64 {
@@ -116,28 +116,26 @@ fn ted_draw(begin: &u64, cursor: &u64, gap: u64, end: &u64) {
     ptr = ptr + 1;
     if ptr == cursor { ptr = ptr + gap; }
   }
+  gpu_draw_cursor(col, row);
   gpu_switch_buffer();
-  gpu_set_cursor(col, row);
 }
 
 fn text_editor(buffer: &u64, offset: u64, max_length: u64) {
   let length = *buffer;
   if length > max_length { return; }
-  let begin = buffer + 4;
+  let begin = buffer + 8;
   let cursor = begin + length;
   let end = begin + max_length;
   let gap = end - cursor;
   let c = 0;
   if offset > length { offset = length; }
   cursor = ted_set_cursor(begin, cursor, gap, begin + offset);
-  gpu_set_color(0, 7, 0);
-  gpu_set_double_buffer();
+  gpu_set_color(GREEN);
   ted_draw(begin, cursor, gap, end);
   loop {
     read(STANDARD_INPUT, &c, 1);
     if c == ESCAPE_KEY {
       *buffer = ted_set_cursor(begin, cursor, gap, end - gap) - begin;
-      gpu_set_single_buffer();
       return;
     }
     if c == BACKSPACE_KEY {
@@ -196,10 +194,10 @@ fn main(args: &u64, args_end: &u64, heap: &u64, heap_limit: &u64) -> u64 {
   }
   if heap_limit < heap + 256 { return OUT_OF_MEMORY; }
   let buffer = heap;
-  let max_length = heap_limit - heap - 4;
+  let max_length = heap_limit - heap - 8;
   let stream = open(name, length, 'r');
   if status(stream) == OK {
-    *buffer = read(stream, buffer + 4, max_length);
+    *buffer = read(stream, buffer + 8, max_length);
     close(stream);
     if status(*buffer) != OK {
       return write_error(READ_ERROR, 10, status(*buffer));
@@ -217,7 +215,7 @@ fn main(args: &u64, args_end: &u64, heap: &u64, heap_limit: &u64) -> u64 {
   if status(stream) != OK {
     return write_error(WRITE_ERROR, 11, status(stream));
   }
-  let n = write(stream, buffer + 4, *buffer);
+  let n = write(stream, buffer + 8, *buffer);
   if status(n) != OK {
     return write_error(WRITE_ERROR, 11, status(n));
   }

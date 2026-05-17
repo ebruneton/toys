@@ -1,14 +1,3 @@
-struct Context {
-  r0: u64,
-  r1: u64,
-  r2: u64,
-  r3: u64,
-  r12: u64,
-  r14: u64,
-  return_address: u64,
-  status_register: u64
-}
-
 const MODE_UNUSED: u64 = 0;
 const MODE_LIST: u64 = 'l';
 const MODE_READ: u64 = 'r';
@@ -17,8 +6,8 @@ const MODE_WRITE: u64 = 'w';
 struct FileStream {
   next: &FileStream,
   mode: u64,
-  file_block: &FileBlock,
-  current_block: &DiskBlock,
+  file_block: u64,
+  current_block: u64,
   current_offset: u64
 }
 
@@ -26,16 +15,24 @@ struct Process {
   parent: &Process,
   begin: &u64,
   end: &u64,
-  saved_context: &Context,
+  saved_r8: u64,
+  saved_r9: u64,
+  saved_stack_pointer: u64,
+  saved_return_address: u64,
   file_streams: &FileStream,
   output_p: &&u64,
   output_limit: &u64
 }
 
 struct Kernel {
+  stack_pointer: u64,
   heap: &u64,
   heap_limit: &u64,
-  stack_limit: &u64,
+  mem_limit: &u64,
+  keyboard: &SimpleTextInputProtocol,
+  gpu: &Gpu,
+  disk: &Disk,
+  system: &SystemTable,
   current_process: &Process,
   spawn: u64,
   exit: u64,
@@ -49,64 +46,46 @@ struct Kernel {
   reboot: u64
 }
 
-const KERNEL_POINTER_REGISTER: &&Kernel = 1074666140;
+fn os_kernel() -> &Kernel;
 
-fn os_kernel() -> &Kernel { return *KERNEL_POINTER_REGISTER; }
+fn get_control_register3() -> &u64    [ 65, 15, 32, 216, /*mov r8,cr3*/ 195 /*ret*/ ]
+fn set_control_register3(value: &u64) [ 65, 15, 34, 216, /*mov cr3,r8*/ 195 /*ret*/ ]
 
-fn min(x: u64, y: u64) -> u64 {
-  if x < y { return x; } else { return y; }
+fn not(x: u64) -> u64 { return 0 - (x + 1); }
+
+fn set_page_entry_user_mode(entry_p: &u64, enabled: u64) -> &u64 {
+  if enabled == 1 {
+    *entry_p = *entry_p | 4;
+  } else {
+    *entry_p = *entry_p & not(4);
+  }
+  *entry_p = (*entry_p) & not(1 << 63);
+  const PAGE_PHYSICAL_ADDRESS_MASK: u64 = 4503599627366400;
+  return (*entry_p & PAGE_PHYSICAL_ADDRESS_MASK) as &u64;
 }
 
-fn max(x: u64, y: u64) -> u64 {
-  if x > y { return x; } else { return y; }
+fn set_page_user_mode(address: u64, enabled: u64) {
+  const OFFSET_MASK: u64 = 4088;
+  let table4 = get_control_register3();
+  let table3 = set_page_entry_user_mode(table4 + ((address >> 36) & OFFSET_MASK), enabled);
+  let table2 = set_page_entry_user_mode(table3 + ((address >> 27) & OFFSET_MASK), enabled);
+  let table1 = set_page_entry_user_mode(table2 + ((address >> 18) & OFFSET_MASK), enabled);
+  set_page_entry_user_mode(table1 + ((address >> 9) & OFFSET_MASK), enabled);
 }
 
-fn set_control_register(value: u64) [
-  /*MSR_CONTROL_R0*/ 2283074432;
-  /*MOV_PC_LR*/ 18167;
-]
-
-fn get_process_stack_pointer() -> &u64 [
-  /*MRS_R0_PSP*/ 2148135919;
-  /*MOV_PC_LR*/ 18167;
-]
-
-fn set_process_stack_pointer(value: &u64) [
-  /*MSR_PSP_R0*/ 2282353536;
-  /*MOV_PC_LR*/ 18167;
-]
-
-fn mpu_set_region(id: u64, begin: u64, end: u64, level: u64) {
-  const MPU_REGION_BASE_ADDRESS_REGISTER: &u64 = 3758157212;
-  const MPU_REGION_ATTRIBUTE_AND_SIZE_REGISTER: &u64 = 3758157216;
-  const RAM_FULL_ACCESS_ENABLED: u64 = 50724865;
-  let base_address = (begin >> level) << level;
-  begin = (begin - base_address) >> (level - 3);
-  end = (end - base_address) >> (level - 3);
-  *MPU_REGION_BASE_ADDRESS_REGISTER = base_address | 16 | id;
-  *MPU_REGION_ATTRIBUTE_AND_SIZE_REGISTER = RAM_FULL_ACCESS_ENABLED |
-      (255 - (1 << end) + (1 << begin)) << 8 | (level - 1) << 1;
-}
-
-fn mpu_set_end_regions(id: u64, begin: &u64, end: &u64, level: u64) {
-  let gap_begin = min(((*begin >> level) + 1) << level, *end);
-  let gap_end = max(*begin, ((*end - 1) >> level) << level);
-  mpu_set_region(id, *begin, gap_begin, level);
-  mpu_set_region(id + 1, gap_end, *end, level);
-  *begin = min(gap_begin, gap_end);
-  *end = gap_end;
-}
-
-fn mpu_set_regions(begin: u64, end: u64) {
-  mpu_set_end_regions(0, &begin, &end, 8);
-  mpu_set_end_regions(2, &begin, &end, 11);
-  mpu_set_end_regions(4, &begin, &end, 14);
-  mpu_set_end_regions(6, &begin, &end, 17);
+fn set_pages_user_mode(begin_page: &u64, end_page: &u64, enabled: u64) {
+  while begin_page < end_page {
+    set_page_user_mode(begin_page as u64, enabled);
+    begin_page = begin_page + 4096;
+  }
+  set_control_register3(get_control_register3());  /* Invalidate the TLB cache. */
 }
 
 fn os_set_current_process(kernel: &Kernel, process: &Process) {
-  set_process_stack_pointer(process.saved_context as &u64);
-  mpu_set_regions(process.begin as u64, process.end as u64);
+  if process.parent != null {
+    set_pages_user_mode(process.parent.begin, process.parent.end, 0);
+  }
+  set_pages_user_mode(process.begin, process.end, 1);
   kernel.current_process = process;
 }
 
@@ -125,11 +104,11 @@ fn os_spawn(dst: &u64, name: &u64, name_length: u64,
   if sizeof(Process) > kernel.heap_limit - kernel.heap {
     return error_result(OUT_OF_MEMORY);
   }
-  let begin = (((dst as u64 + 31) >> 5) << 5) as &u64;
-  let end = (((kernel.stack_limit as u64) >> 5) << 5) as &u64;
+  let begin = (((dst as u64 + 4095) >> 12) << 12) as &u64;
+  let end = kernel.mem_limit;
   let parent = kernel.current_process;
   if parent != null {
-    end = ((get_process_stack_pointer() as u64 >> 5) << 5) as &u64;
+    end = ((parent.saved_stack_pointer as u64 >> 12) << 12) as &u64;
     if end < begin || begin < parent.begin ||
         process_contains_buffer(parent, name, name_length) == FALSE ||
         process_contains_buffer(parent, args, args_length) == FALSE {
@@ -138,44 +117,37 @@ fn os_spawn(dst: &u64, name: &u64, name_length: u64,
     if args + args_length > begin && args < end {
       return error_result(INVALID_ARGUMENT);
     }
-    if process_contains_buffer(parent, output_p as &u64, 4) == FALSE ||
+    if process_contains_buffer(parent, output_p as &u64, 8) == FALSE ||
         *output_p < parent.begin || *output_p > dst {
       return error_result(INVALID_ARGUMENT);
     }
   }
-  let file_block = disk_find_file(name, name_length, null);
-  if file_block == null { return error_result(NOT_FOUND); }
-  let code_size = disk_get_file_size(file_block);
+  let disk = kernel.disk;
+  let file_block = disk_find_file(disk, name, name_length, null);
+  if file_block == 0 { return error_result(NOT_FOUND); }
+  let code_size = disk_get_file_size(disk, file_block);
   if code_size > end - begin {
     return error_result(OUT_OF_MEMORY);
   }
-  const MIN_STACK_SIZE: u64 = 512;
+  const MIN_STACK_SIZE: u64 = 1024;
   let heap = begin + code_size;
   let heap_limit = end - MIN_STACK_SIZE;
-  if heap_limit < heap + 4 || args_length > heap_limit - heap - 4 {
+  if heap_limit < heap + 8 || args_length > heap_limit - heap - 8 {
     return error_result(OUT_OF_MEMORY);
   }
-  let offset = 12 + name_length;
-  disk_read_file(&file_block as &&DiskBlock, &offset, begin, code_size);
+  let offset = 24 + name_length;
+  disk_read_file(disk, &file_block, &offset, begin, code_size);
   *heap = args_length;
-  mem_copy_non_overlapping(args, heap + 4, args_length);
-  let context = (end - sizeof(Context)) as &Context;
-  context.r0 = heap as u64;
-  context.r1 = heap_limit as u64;
-  context.r14 = 0;
-  context.return_address = begin as u64;
-  context.status_register = 1 << 24;
-  if parent != null {
-    parent.saved_context = get_process_stack_pointer() as &Context;
-  } else {
-    set_control_register(/*unprivileged*/1);
-  }
+  mem_copy_non_overlapping(args, heap + 8, args_length);
   let process = kernel.heap as &Process;
   kernel.heap = kernel.heap + sizeof(Process);
   process.parent = parent;
   process.begin = begin;
   process.end = end;
-  process.saved_context = context;
+  process.saved_r8 = heap as u64;
+  process.saved_r9 = heap_limit as u64;
+  process.saved_stack_pointer = end as u64;
+  process.saved_return_address = begin as u64;
   process.file_streams = null;
   process.output_p = output_p;
   process.output_limit = dst;
@@ -187,10 +159,10 @@ fn os_exit(result: u64) -> u64 {
   let kernel = os_kernel();
   let process = kernel.current_process;
   if process.parent == null { return error_result(INVALID_STATE); }
-  if result >= (1 << 24) { return error_result(INVALID_ARGUMENT); }
+  if result >= (1 << 56) { return error_result(INVALID_ARGUMENT); }
   kernel.heap = process as &u64;
   process = process.parent;
-  process.saved_context.r0 = result;
+  process.saved_r8 = result;
   os_set_current_process(kernel, process);
   return OK;
 }

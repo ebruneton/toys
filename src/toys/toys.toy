@@ -1,15 +1,26 @@
-fn hard_fault_handler() {
-  os_exit(INTERNAL_ERROR);
+fn sysret(r8: u64, r9: u64, return_address: u64, eflags: u64, stack_pointer: u64) [
+  76, 137, 209, /* mov rcx,r10 ; store 'return_address' in rcx */
+  76, 137, 228, /* mov rsp,r12 ; switch to caller's 'stack_pointer' */
+  72, 15, 7     /* sysretq     ; return to caller */
+]
+
+fn os_sysret() {
+  let p = os_kernel().current_process;
+  sysret(p.saved_r8, p.saved_r9, p.saved_return_address, /*eflags=*/0, p.saved_stack_pointer);
 }
 
-fn call(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: u64, arg5: u64,
-    function: u64) -> u64 [
-  /*BX_R6*/ 18224;
+fn hard_fault_handler() {
+  os_exit(INTERNAL_ERROR);
+  os_sysret();
+}
+
+fn call(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: u64, arg5: u64, function: u64) -> u64 [
+  65, 255, 230  /* jmp r14 ; jump to 'function' */
 ]
 
 const NUM_SYSTEM_CALLS: u64 = 10;
 
-static SYSTEM_CALL_ARITY = [6, 1, 1, 2, 3, 3, 3, 1, 2, 1];
+static SYSTEM_CALL_ARITY = [6, 1, 1, 2, 3, 3, 3, 1, 2, 0];
 
 struct CallArguments {
   arg0: u64,
@@ -20,52 +31,166 @@ struct CallArguments {
   arg5: u64
 }
 
-fn supervisor_call_handler() {
-  let kernel = os_kernel();
-  let exc_return_ptr = &kernel as &u64 + 4;
-  let context = (exc_return_ptr + 4) as &Context;
+static KERNEL = [0, 0, 0, 0, 0, 0, 0, 0];  /* Must stay just before syscall_handler_prologue(). */
+
+fn syscall_handler_prologue() [
+  73, 137, 202,                    /* mov r10,rcx      ; store return address in r10 */
+  73, 137, 227,                    /* mov r11,rsp      ; store caller's stack pointer in r11 */
+  76, 139, 37, 235, 255, 255, 255, /* mov r12,[rip-21] ; store value of KERNEL in r12 */
+  73, 139, 36, 36                  /* mov rsp,[r12]    ; switch to Kernel's stack_pointer */
+]
+fn syscall_handler(id: u64, args: &CallArguments,
+    return_address: u64, stack_pointer: u64, kernel: &Kernel) {
   let process = kernel.current_process;
-  if process != null {
-    context = get_process_stack_pointer() as &Context;
-  }
-  let id = context.r0;
-  let function_p = &kernel.spawn + (id << 2);
-  let args = context.r1 as &CallArguments;
+  process.saved_stack_pointer = stack_pointer;
+  process.saved_return_address = return_address;
+  let function_p: &u64 = &kernel.spawn + (id << 3);
   let args_size = 0;
   let result = error_result(INVALID_ARGUMENT);
   if id < NUM_SYSTEM_CALLS {
-    args_size = load8(SYSTEM_CALL_ARITY + id) << 2;
-    if process == null ||
-        process_contains_buffer(process, args as &u64, args_size) == TRUE {
-      result = call(args.arg0, args.arg1, args.arg2, args.arg3,
-          args.arg4, args.arg5, *function_p + 1);
+    args_size = load8(SYSTEM_CALL_ARITY + id) << 3;
+    if process_contains_buffer(process, args as &u64, args_size) == TRUE {
+     result = call(args.arg0, args.arg1, args.arg2, args.arg3, args.arg4, args.arg5, *function_p);
     }
   }
-  context.r0 = result;
-  *exc_return_ptr = 4294967293; /*Thread Mode, Process Stack*/
+  process.saved_r8 = result;
+  os_sysret();
 }
 
-fn usart_handler() {
-  keyboard_handler();
+fn os_kernel() -> &Kernel { return *KERNEL as &Kernel; }
+
+fn get_gdt_register(ptr: &u64)       [ 65, 15, 1, 0,  /*sgdt [r8]*/ 195 /*ret*/ ]
+fn set_gdt_register(ptr: &u64)       [ 65, 15, 1, 16, /*lgdt [r8]*/ 195 /*ret*/ ]
+fn get_idt_register(ptr: &u64)       [ 65, 15, 1, 8,  /*sidt [r8]*/ 195 /*ret*/ ]
+fn set_task_register(value: u64)     [ 65, 15, 0, 216, /*ltr r8d*/  195 /*ret*/ ]
+fn get_control_register0() -> u64    [ 65, 15, 32, 192, /*mov r8,cr0*/ 195 /*ret*/ ]
+fn set_control_register0(value: u64) [ 65, 15, 34, 192, /*mov cr0,r8*/ 195 /*ret*/ ]
+
+fn get_model_specific_register(register: u64) -> u64 [
+  76, 137, 193,     /* mov rcx,r8 */
+  15, 50,           /* rdmsr */
+  73, 137, 208,     /* mov r8,rdx */
+  73, 193, 224, 32, /* shl r8,0x20 */
+  73, 9, 192,       /* or r8,rax */
+  195               /* ret */
+]
+fn set_model_specific_register(register: u64, value: u64) [
+  76, 137, 193,     /* mov rcx,r8 */
+  76, 137, 200,     /* mov rax,r9 */
+  76, 137, 202,     /* mov rdx,r9 */
+  72, 193, 234, 32, /* shr rdx,32 */
+  15, 48,           /* wrmsr */
+  195               /* ret */
+]
+
+struct DescriptorTable {
+  limit: u64,
+  base: &u64
 }
 
-fn os_init(code: &u64, heap: &u64, stack: &u64) {
-  const VECTOR_TABLE_OFFSET_REGISTER: &&u64 = 3758157064;
-  const HARD_FAULT_HANDLER_OFFSET: u64 = 12;
-  const SVC_HANDLER_OFFSET: u64 = 44;
-  const USART_HANDLER_OFFSET: u64 = 132;
-  let vector_table = code - 257;
-  *(vector_table + HARD_FAULT_HANDLER_OFFSET) = hard_fault_handler + 1;
-  *(vector_table + SVC_HANDLER_OFFSET) = supervisor_call_handler + 1;
-  *(vector_table + USART_HANDLER_OFFSET) = usart_handler + 1;
-  *VECTOR_TABLE_OFFSET_REGISTER = vector_table;
+fn gdt_register_read(gdt: &DescriptorTable) {
+  get_gdt_register(&gdt.limit + 6);
+  gdt.limit = gdt.limit >> 48;
+}
 
-  const MAX_KERNEL_HEAP_SIZE: u64 = 512;
-  const MAX_KERNEL_STACK_SIZE: u64 = 512;
-  let kernel = heap as &Kernel;
-  kernel.heap = heap + sizeof(Kernel);
-  kernel.heap_limit = heap + MAX_KERNEL_HEAP_SIZE;
-  kernel.stack_limit = stack - MAX_KERNEL_STACK_SIZE;
+fn gdt_register_write(gdt: &DescriptorTable) {
+  gdt.limit = gdt.limit << 48;
+  set_gdt_register(&gdt.limit + 6);
+}
+
+fn idt_register_read(idt: &DescriptorTable) {
+  get_idt_register(&idt.limit + 6);
+  idt.limit = idt.limit >> 48;
+}
+
+fn new_task_state_segment(heap: &&u64, heap_limit: &u64, rsp0: u64) -> u64 {
+  let tss = mem_allocate(/*size=*/ 104, heap, heap_limit);
+  let i = 0;
+  while i < 13 {
+    *(tss + 8 * i) = 0;
+    i = i + 1;
+  }
+  *(tss + 4) = rsp0;
+  return tss as u64;
+}
+
+fn init_global_descriptor_table_tss_entries(dst: &u64, tss: u64) {
+  store16(dst, not(0));
+  store16(dst + 2, tss);
+  store8(dst + 4, tss >> 16);
+  store8(dst + 5, 137 /* present, available TSS */);
+  store8(dst + 6, not(0));
+  store8(dst + 7, tss >> 24);
+  *(dst + 8) = tss >> 32;
+}
+
+fn new_global_descriptor_table(
+    gdt: &DescriptorTable, tss: u64, heap: &&u64, heap_limit: &u64) -> u64 {
+  gdt_register_read(gdt);
+  let new_limit = gdt.limit + 48;
+  let new_base = mem_allocate(new_limit + 1, heap, heap_limit);
+  let offset = 0;
+  while offset < gdt.limit {
+    *(new_base + offset) = *(gdt.base + offset);
+    offset = offset + 8;
+  }
+  *(new_base + offset) = 49428545226735615;      /* KERNEL CODE: 0x00AF9B000000FFFF */
+  *(new_base + offset + 8) = 58426948388454399;  /* KERNEL DATA: 0x00CF93000000FFFF */
+  *(new_base + offset + 16) = 58532501504720895; /* USER DATA:   0x00CFF3000000FFFF */
+  *(new_base + offset + 24) = 49534098343002111; /* USER CODE:   0x00AFFB000000FFFF */
+  init_global_descriptor_table_tss_entries(new_base + offset + 32, tss);
+  gdt.limit = new_limit;
+  gdt.base = new_base;
+  gdt_register_write(gdt);
+  return offset;
+}
+
+fn init_interrupt_descriptor_table(idt: &DescriptorTable, base_selector: u64) {
+  idt_register_read(idt);
+  let offset = hard_fault_handler;
+  let dst = idt.base;
+  let end = dst + min(32 * 16, idt.limit);
+  while dst < end {
+    store16(dst, offset);
+    store16(dst + 2, base_selector);
+    store16(dst + 4, 36352 /* present, interrupt gate */);
+    store16(dst + 6, offset >> 16);
+    store32(dst + 8, offset >> 32);
+    dst = dst + 16;
+  }
+}
+
+fn init_syscall_registers(star: u64, lstar: u64) {
+  const EFER : u64 = 3221225600;  /* Extended Feature Enable Register */
+  const STAR : u64 = 3221225601;
+  const LSTAR : u64 = 3221225602;
+  set_model_specific_register(EFER, (get_model_specific_register(EFER) | /*SYSCALL Enable*/ 1));
+  set_model_specific_register(STAR, get_model_specific_register(STAR) | (star << 32));
+  set_model_specific_register(LSTAR, lstar);
+}
+
+fn os_init(code: &u64, heap: &u64, num_pages: u64, system: &SystemTable, io: &BlockIoProtocol) {
+  let mem_start = ((code as u64 >> 12) << 12) as &u64;
+  let mem_limit = mem_start + num_pages * 4096;
+  let stack_pointer = &code as u64;
+  let buffer1 = 0;
+  let buffer0 = 0;
+  let tss = new_task_state_segment(&heap, mem_limit, stack_pointer);
+  let selector = new_global_descriptor_table(&buffer0 as &DescriptorTable, tss, &heap, mem_limit);
+  set_task_register(selector + 32);
+  init_interrupt_descriptor_table(&buffer0 as &DescriptorTable, selector);
+  init_syscall_registers((selector + 8) << 16 | selector, syscall_handler_prologue);
+  set_control_register0(get_control_register0() & not(65536));  /* disable WRITE_PROTECT_BIT */
+
+  let kernel = mem_allocate(sizeof(Kernel), &heap, mem_limit) as &Kernel;
+  kernel.keyboard = system.con_in;
+  kernel.gpu = gpu_new(&heap, mem_limit, system.con_out);
+  kernel.disk = disk_new(&heap, mem_limit, io);
+  kernel.system = system;
+  kernel.stack_pointer = stack_pointer;
+  kernel.heap = heap;
+  kernel.heap_limit = (((heap as u64 + 1024 + 4095) >> 12) << 12) as &u64;
+  kernel.mem_limit = mem_limit;
   kernel.current_process = null;
   kernel.spawn = os_spawn;
   kernel.exit = os_exit;
@@ -77,27 +202,14 @@ fn os_init(code: &u64, heap: &u64, stack: &u64) {
   kernel.close = os_close;
   kernel.delete = os_delete;
   kernel.reboot = os_reboot;
-  *(KERNEL_POINTER_REGISTER as &&Kernel) = kernel;
-
-  clock_init();
-  keyboard_init();
-  gpu_init();
-  const SVC_HANDLER_PRIORITY_REGISTER: &u64 = 3758157084;
-  const MPU_CONTROL_REGISTER: &u64 = 3758157204;
-  *SVC_HANDLER_PRIORITY_REGISTER = 255 << 24;
-  *MPU_CONTROL_REGISTER = 5; /*Enable MPU and background region*/
-}
-
-fn system_call(id: u64, args: &u64) [ /*SVC*/ 57088; ]
-
-fn spawn(dst: &u64, name: &u64, name_length: u64,
-    args: &u64, args_length: u64, output_p: &&u64) {
-  system_call(0, &dst as &u64);
+  *KERNEL as &Kernel = kernel;
 }
 
 static SHELL = ['s','h','e','l','l'];
 
 fn os_spawn_shell() {
   let dst = os_kernel().heap_limit;
-  spawn(dst, SHELL, 5, null, 0, &dst);
+  if os_spawn(dst, SHELL, 5, null, 0, &dst) == OK {
+    os_sysret();
+  }
 }

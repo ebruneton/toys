@@ -1,6 +1,6 @@
 fn os_sleep(millis: u64) -> u64 {
-  while millis > 1000 { delay(1000); millis = millis - 1000; }
-  delay(millis);
+  let stall = *(os_kernel().system.boot_services + 248);
+  efi_call1(stall, millis * 1000);
   return OK;
 }
 
@@ -9,9 +9,10 @@ fn os_stat(name: &u64, length: u64) -> u64 {
   if process_contains_buffer(process, name, length) == FALSE {
     return error_result(INVALID_ARGUMENT);
   }
-  let file_block = disk_find_file(name, length, null);
+  let disk = os_kernel().disk;
+  let file_block = disk_find_file(disk, name, length, null);
   if file_block == null { return error_result(NOT_FOUND); }
-  return disk_get_file_size(file_block);
+  return disk_get_file_size(disk, file_block);
 }
 
 const STANDARD_INPUT: u64 = 0;
@@ -45,13 +46,13 @@ fn process_get_unused_file_stream(self: &Process, stream_id: &u64) -> &FileStrea
     kernel.heap = kernel.heap + sizeof(FileStream);
     stream.next = null;
     stream.mode = MODE_UNUSED;
-    stream.file_block = null;
+    stream.file_block = 0;
     *stream_ptr = stream;
   }
   return stream;
 }
 
-fn process_can_open(self: &Process, file_block: &FileBlock, mode: u64) -> u64 {
+fn process_can_open(self: &Process, file_block: u64, mode: u64) -> u64 {
   let process = self;
   let stream: &FileStream = null;
   while process != null {
@@ -78,24 +79,27 @@ fn os_open(name: &u64, length: u64, mode: u64) -> u64 {
   let stream_id = 0;
   let stream = process_get_unused_file_stream(process, &stream_id);
   if stream == null { return error_result(OUT_OF_MEMORY); }
-  let file_block = SUPER_BLOCK.first_file;
+  let disk = os_kernel().disk;
+  disk_read_block_buffer(disk, SUPER_BLOCK);
+  let file_block = disk.block_buffer.next_file;
   let status = OK;
   if length == 0 {
     if mode != MODE_READ { status = INVALID_ARGUMENT; }
     mode = MODE_LIST;
   } else {
-    file_block = disk_find_file(name, length, null);
-    if file_block == null {
+    file_block = disk_find_file(disk, name, length, null);
+    if file_block == 0 {
       if mode == MODE_READ {
         status = NOT_FOUND;
       } else {
-        status = disk_create_file(name, length, &file_block);
+        status = disk_create_file(disk, name, length, &file_block);
       }
     } else if process_can_open(process, file_block, mode) == TRUE {
       if mode == MODE_READ {
-        stream.current_offset = 12 + file_block.name_length;
+        disk_read_block_buffer(disk, file_block);
+        stream.current_offset = 24 + disk.block_buffer.name_length;
       } else {
-        disk_clear_file(file_block);
+        disk_clear_file(disk, file_block);
       }
     } else {
       status = INVALID_STATE;
@@ -104,29 +108,28 @@ fn os_open(name: &u64, length: u64, mode: u64) -> u64 {
   if status != OK { return error_result(status); }
   stream.mode = mode;
   stream.file_block = file_block;
-  stream.current_block = file_block as &DiskBlock;
+  stream.current_block = file_block;
   return stream_id;
 }
 
+fn min(x: u64, y: u64) -> u64 {
+  if x < y { return x; } else { return y; }
+}
+
 fn os_read(stream_id: u64, buffer: &u64, size: u64) -> u64 {
-  let process = os_kernel().current_process;
+  let kernel = os_kernel();
+  let process = kernel.current_process;
   if size == 0 || process_contains_buffer(process, buffer, size) == FALSE {
     return error_result(INVALID_ARGUMENT);
   }
   let i = 0;
   if stream_id < FIRST_FILE_STREAM_ID {
     if stream_id == STANDARD_INPUT {
-      *buffer = keyboard_wait_char();
+      *buffer = keyboard_wait_char(kernel.keyboard);
       return 1;
     } else if stream_id == KEYBOARD {
-      *buffer = keyboard_get_char();
+      *buffer = keyboard_get_char(kernel.keyboard);
       return 1;
-    } else if stream_id == GPU {
-      while i < size {
-        store8(buffer + i, spi_transfer(16384 /*Read Data Command*/));
-        i = i + 1;
-      }
-      return size;
     } else {
       return error_result(INVALID_STATE);
     }
@@ -135,35 +138,22 @@ fn os_read(stream_id: u64, buffer: &u64, size: u64) -> u64 {
   if stream == null || stream.mode == MODE_UNUSED {
     return error_result(NOT_FOUND);
   }
+  let disk = kernel.disk;
   if stream.mode == MODE_LIST {
-    if stream.file_block == null { return 0; }
-    size = min(size, stream.file_block.name_length);
-    mem_copy_non_overlapping(&stream.file_block.name, buffer, size);
-    stream.file_block = stream.file_block.next_file;
+    if stream.file_block == 0 { return 0; }
+    disk_read_block_buffer(disk, stream.file_block);
+    size = min(size, disk.block_buffer.name_length);
+    mem_copy_non_overlapping(&disk.block_buffer.name, buffer, size);
+    stream.file_block = disk.block_buffer.next_file;
     return size;
   }
   if stream.mode != MODE_READ { return error_result(INVALID_STATE); }
-  return size - disk_read_file(&stream.current_block, &stream.current_offset, buffer, size);
-}
-
-static GPU_SAFE_REGISTERS = [
-  4, 0, 1, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0,
-  255, 224, 255, 255, 255, 31, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-
-fn os_gpu_write(value: u64) {
-  let command = value >> 8;
-  let register = value & 255;
-  let mask = 0;
-  if command != 0 /*Write Data Command*/ {
-    if command != 128 /*Select Register Command*/ { return; }
-    mask = 1 << (register & 7);
-    if *(GPU_SAFE_REGISTERS + (register >> 3)) & mask == 0 { return; }
-  }
-  spi_transfer(value);
+  return size - disk_read_file(disk, &stream.current_block, &stream.current_offset, buffer, size);
 }
 
 fn os_write(stream_id: u64, buffer: &u64, size: u64) -> u64 {
-  let process = os_kernel().current_process;
+  let kernel = os_kernel();
+  let process = kernel.current_process;
   if process_contains_buffer(process, buffer, size) == FALSE {
     return error_result(INVALID_ARGUMENT);
   }
@@ -175,9 +165,9 @@ fn os_write(stream_id: u64, buffer: &u64, size: u64) -> u64 {
       *process.output_p = *process.output_p + size;
       return size;
     } else if stream_id == GPU {
-      while i + 1 < size {
-        os_gpu_write(load16(buffer + i));
-        i = i + 2;
+      while i + 2 < size {
+        gpu_set_register(kernel.gpu, load8(buffer + i), load16(buffer + i + 1));
+        i = i + 3;
       }
       return i;
     } else {
@@ -189,7 +179,7 @@ fn os_write(stream_id: u64, buffer: &u64, size: u64) -> u64 {
     return error_result(NOT_FOUND);
   }
   if stream.mode != MODE_WRITE { return error_result(INVALID_STATE); }
-  let status = disk_write_file(&stream.current_block, buffer, size);
+  let status = disk_write_file(kernel.disk, &stream.current_block, buffer, size);
   if status != OK { return error_result(status); }
   return size;
 }
@@ -201,7 +191,7 @@ fn os_close(stream_id: u64) -> u64 {
     return error_result(NOT_FOUND);
   }
   stream.mode = MODE_UNUSED;
-  stream.file_block = null;
+  stream.file_block = 0;
   return OK;
 }
 
@@ -210,9 +200,10 @@ fn os_delete(name: &u64, length: u64) -> u64 {
   if process_contains_buffer(process, name, length) == FALSE {
     return error_result(INVALID_ARGUMENT);
   }
-  let previous_file_block: &FileBlock = null;
-  let file_block = disk_find_file(name, length, &previous_file_block);
-  if file_block == null { return error_result(NOT_FOUND); }
+  let disk = os_kernel().disk;
+  let previous_file_block = 0;
+  let file_block = disk_find_file(disk, name, length, &previous_file_block);
+  if file_block == 0 { return error_result(NOT_FOUND); }
   if process_can_open(process, file_block, MODE_WRITE) == FALSE {
     return error_result(INVALID_STATE);
   }
@@ -221,20 +212,18 @@ fn os_delete(name: &u64, length: u64) -> u64 {
     stream = process.file_streams;
     while stream != null {
       if stream.mode == MODE_LIST && stream.file_block == file_block {
-        stream.file_block = file_block.next_file;
+        disk_read_block_buffer(disk, file_block);
+        stream.file_block = disk.block_buffer.next_file;
       }
       stream = stream.next;
     }
     process = process.parent;
   }
-  disk_delete_file(file_block, previous_file_block);
+  disk_delete_file(disk, file_block, previous_file_block);
   return OK;
 }
 
-fn os_reboot(mode: u64) -> u64 {
-  const RESET_CONTROL_REGISTER: &u64 = 1074665984;
-  const RESET_COMMAND: u64 = 2768240653;
-  if mode == 1 { boot_mode_select_rom(); }
-  *RESET_CONTROL_REGISTER = RESET_COMMAND;
-  return OK;
+fn os_reboot() -> u64 {
+  let reset_system = *(os_kernel().system.runtime_services + 104);
+  return efi_call4(reset_system, 0, 0, 0, 0);
 }

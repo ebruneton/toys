@@ -1,67 +1,94 @@
-static VECTOR_TABLE = [
-  0, 128, 8, 32,        /* Initial Stack Pointer */
-  17, 0, 0, 0,          /* Reset handler */
-  't', 'o', 'y', 's',
-  17, 0, 8, 0           /* Hard Fault handler */
-];
+fn main(image_handle: u64, system: &SystemTable);
 
-struct DiskBlock {
-  next_block: &DiskBlock
+fn efi_prologue() [
+  73, 137, 200, /*mov r8,rcx*/
+  73, 137, 209  /*mov r9,rdx*/
+]
+
+fn efi_main(image_handle: u64, system: &SystemTable) {
+  main(image_handle, system);
 }
 
-struct FileBlock {
-  next_block: &DiskBlock,
-  next_file: &FileBlock,
+static BLOCK_IO = [33, 91, 78, 150, 89, 100, 210, 17,
+                   142, 57, 0, 160, 201, 105, 114, 59];
+static LOADED_IMAGE = [161, 49, 27, 91, 98, 149, 210, 17,
+                       142, 63, 0, 160, 201, 105, 114, 59];
+static DEVICE_PATH = [145, 110, 87, 9, 63, 109, 210, 17,
+                      142, 57, 0, 160, 201, 105, 114, 59];
+
+static KERNEL_NAME = ['b', 'i', 'n', '/', 't', 'o', 'y', 's'];
+static ERROR = ['E', 0, 'r', 0, 'r', 0, 'o', 0, 'r', 0, ' ', 0, 0, 0];
+
+struct DiskBlock {
+  next_block: u64,
+  next_file: u64,
   name_length: u64,
   name: u64
 }
 
-struct SuperBlock {
-  first_file: &FileBlock,
-  first_free_block: &DiskBlock
+fn error(out: &SimpleTextOutputProtocol, code: u64) {
+  efi_call2(out.output_string, out as u64, ERROR as u64);
+  efi_call2(out.output_string, out as u64, &code as u64);
+  loop {}
 }
 
-const SUPER_BLOCK: &SuperBlock = 524544;
-
-fn copy_block(src: &u64, dst: &u64, size: u64) -> &u64;
-
-fn run(code: &u64, heap: &u64, stack: &u64);
-
-fn main() {
-  const EEFC0_COMMAND_REGISTER: &u64 = 1074661892;
-  if VECTOR_TABLE != null {
-    *EEFC0_COMMAND_REGISTER = 1509949708; /*Clear Boot Mode Selection Bit*/
-    loop {}
-  }
-  const KERNEL_NAME: &u64 = 8;
-  let file = SUPER_BLOCK.first_file;
-  while file.name_length != 4 || file.name != *KERNEL_NAME {
-    file = file.next_file;
-  }
-  const KERNEL_ADDRESS: &u64 = 537329920;
-  let dst = KERNEL_ADDRESS;
-  let block = file as &DiskBlock;
-  let offset = sizeof(FileBlock);
-  while block as u64 > 256 {
-    dst = copy_block(block as &u64 + offset, dst, 256 - offset);
-    block = block.next_block;
-    offset = 4;
-  }
-  const STACK_POINTER: &u64 = 537427968;
-  run(KERNEL_ADDRESS + 1, dst, STACK_POINTER);
-}
-
-fn copy_block(src: &u64, dst: &u64, size: u64) -> &u64 {
-  let end = src + size;
-  while src < end {
-    *dst = *src;
-    src = src + 4;
-    dst = dst + 4;
-  }
-  return dst;
-}
-
-fn run(code: &u64, heap: &u64, stack: &u64) [
-  /*MOV_SP_R2*/18069;
-  /*BX_R0*/18176;
+fn run(code: &u64, heap: &u64, num_pages: u64, system: &SystemTable, io: &BlockIoProtocol) [
+  65, 255, 224  /*jmp r8*/
 ]
+
+fn main(image_handle: u64, system: &SystemTable) {
+  let handle_protocol = *(system.boot_services + 152);
+  let loaded_image: &u64 = null;
+  if efi_call3(handle_protocol, image_handle, LOADED_IMAGE as u64, &loaded_image as u64) != 0 {
+    error(system.con_out, '1' /*Can't open LoadedImageProtocol*/);
+  }
+  const LOADED_IMAGE_DEVICE_HANDLE_OFFSET: u64 = 24;
+  let device_handle = *(loaded_image + LOADED_IMAGE_DEVICE_HANDLE_OFFSET);
+  let device_path: &u64 = null;
+  if efi_call3(handle_protocol, device_handle, DEVICE_PATH as u64, &device_path as u64) != 0 {
+    error(system.con_out, '2' /*Can't open DevicePathProtocol*/);
+  }
+  let locate_device_path = *(system.boot_services + 184);
+  if efi_call3(locate_device_path, BLOCK_IO as u64, &device_path as u64,
+      &device_handle as u64) != 0 {
+    error(system.con_out, '3' /*Can't locate BlockIo device*/);
+  }
+  let io: &BlockIoProtocol = null;
+  if efi_call3(handle_protocol, device_handle, BLOCK_IO as u64, &io as u64) != 0 {
+    error(system.con_out, '4' /*Can't open BlockIoProtocol*/);
+  }
+  const NUM_PAGES: u64 = 48;  /* 48 pages * 4KB = 192KB */
+  let allocate_pages = *(system.boot_services + 40);
+  let ptr: &u64 = null;
+  if efi_call4(allocate_pages, 0, 0, NUM_PAGES, &ptr as u64) != 0 {
+    error(system.con_out, '5' /*Can't allocate memory*/);
+  }
+  const SUPER_BLOCK: u64 = 0;
+  const FIRST_LOGICAL_BLOCK_ADDRESS: u64 = 16;
+  let block = SUPER_BLOCK;
+  let disk_block = ptr as &DiskBlock;
+  let media_id = (*io.media << 32) >> 32;
+  loop {
+    if efi_call5(io.read_blocks, io as u64, media_id,
+        block + FIRST_LOGICAL_BLOCK_ADDRESS, 512, ptr as u64) != 0 {
+      error(system.con_out, '6' /*Can't read Toys file system*/);
+    }
+    if disk_block.name_length == 8 && disk_block.name == *KERNEL_NAME { break;  }
+    block = disk_block.next_file;
+  }
+  let backup = 0;
+  block = disk_block.next_block;
+  while block > 512 {
+    disk_block = disk_block + 504;
+    backup = disk_block.next_block;
+    if efi_call5(io.read_blocks, io as u64, media_id,
+        block - 512 + FIRST_LOGICAL_BLOCK_ADDRESS, 512, disk_block as u64) != 0 {
+      error(system.con_out, '7' /*Can't read Toys kernel*/);
+    }
+    block = disk_block.next_block;
+    disk_block.next_block = backup;
+  }
+  let set_watchdog_timer = *(system.boot_services + 256);
+  efi_call4(set_watchdog_timer, 0, 0, 0, 0);
+  run(ptr + sizeof(DiskBlock), (disk_block + block) as &u64, NUM_PAGES, system, io);
+}

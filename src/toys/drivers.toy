@@ -1,269 +1,132 @@
-fn os_init(code: &u64, heap: &u64, stack: &u64);
+fn os_init(code: &u64, heap: &u64, num_pages: u64, system: &SystemTable, io: &BlockIoProtocol);
 
 fn os_spawn_shell();
 
-fn entry(code: &u64, heap: &u64, stack: &u64) {
-  os_init(code, heap, stack);
+fn entry(code: &u64, heap: &u64, num_pages: u64, system: &SystemTable, io: &BlockIoProtocol) {
+  os_init(code, heap, num_pages, system, io);
   os_spawn_shell();
+  loop {}
 }
 
-fn load8(ptr: &u64) -> u64 [ /*LDRB_R0_R0_0*/30720; /*MOV_PC_LR*/18167; ]
-fn load16(ptr: &u64) -> u64 [ /*LDRH_R0_R0_0*/34816; /*MOV_PC_LR*/18167; ]
-fn store8(ptr: &u64, value: u64) [ /*STRB_R1_R0_0*/ 28673; /*MOV_PC_LR*/ 18167;]
+fn load8(ptr: &u64) -> u64  [ 69,15,182,0, /*movzxb r8d,[r8]*/ 195 /*ret*/ ]
+fn load16(ptr: &u64) -> u64 [ 69,15,183,0, /*movzxw r8d,[r8]*/ 195 /*ret*/ ]
+fn load32(ptr: &u64) -> u64 [ 69,139,0,    /*mov r8d,[r8] */   195 /*ret*/ ]
+fn store8(ptr: &u64, value: u64)  [ 69,136,8,     /*mov [r8],r9b*/ 195 /*ret*/ ]
+fn store16(ptr: &u64, value: u64) [ 102,69,137,8, /*mov [r8],r9w*/ 195 /*ret*/ ]
+fn store32(ptr: &u64, value: u64) [ 69,137,8,     /*mov [r8],r9d*/ 195 /*ret*/ ]
 
-fn clock_init() {
-  const EEFC0_MODE_REGISTER: &u64 = 1074661888;
-  const EEFC1_MODE_REGISTER: &u64 = 1074662400;
-  *EEFC0_MODE_REGISTER = 1536; /*wait=6*/
-  *EEFC1_MODE_REGISTER = 1536; /*wait=6*/
-
-  const PMC_MAIN_OSCILLATOR_REGISTER: &u64 = 1074660896;
-  const PMC_PHASE_LOCK_LOOP_REGISTER: &u64 = 1074660904;
-  const PMC_MASTER_CLOCK_REGISTER: &u64 = 1074660912;
-  const PMC_STATUS_REGISTER: &u64 = 1074660968;
-
-  *PMC_MAIN_OSCILLATOR_REGISTER = 3669769; /*Enable Crystal Oscillator*/
-  while (*PMC_STATUS_REGISTER & 1) == 0 {} /*Wait until ready*/
-
-  *PMC_MAIN_OSCILLATOR_REGISTER = 20446985; /*Select Crystal Oscillator*/
-  while (*PMC_STATUS_REGISTER & 65536) == 0 {} /*Wait until selected*/
-
-  *PMC_PHASE_LOCK_LOOP_REGISTER = 537280257; /*Configure Phase Lock Loop*/
-  while (*PMC_STATUS_REGISTER & 2) == 0 {} /*Wait until ready*/
-
-  *PMC_MASTER_CLOCK_REGISTER = 2; /*Select Phase Lock Loop output*/
-  while (*PMC_STATUS_REGISTER & 8) == 0 {} /*Wait until output ready*/
-
-  const SYSTICK_CONTROL_AND_STATUS_REGISTER: &u64 = 3758153744;
-  *SYSTICK_CONTROL_AND_STATUS_REGISTER = 1; /*Enable*/
-
-  const WATCHDOG_TIMER_MODE_REGISTER: &u64 = 1074666068;
-  *WATCHDOG_TIMER_MODE_REGISTER = 32768; /*Disable*/
+fn mem_allocate(size: u64, heap_p: &&u64, heap_limit: &u64) -> &u64 {
+  let ptr = *heap_p;
+  if size > heap_limit as u64 || ptr > heap_limit - size { return null; }
+  *heap_p = ptr + size;
+  return ptr;
 }
 
-fn delay(millis: u64) {
-  const SYSTICK_CONTROL_AND_STATUS_REGISTER: &u64 = 3758153744;
-  const SYSTICK_RELOAD_VALUE_REGISTER: &u64 = 3758153748;
-  const SYSTICK_CURRENT_VALUE_REGISTER: &u64 = 3758153752;
+const NUM_COLS: u64 = 100;
+const NUM_ROWS: u64 = 30;
 
-  *SYSTICK_RELOAD_VALUE_REGISTER = 10500 * millis;
-  *SYSTICK_CURRENT_VALUE_REGISTER = 0;
-  /*Wait until timer counts from 1 to 0*/
-  while *SYSTICK_CONTROL_AND_STATUS_REGISTER & 65536 == 0 {}
+struct Gpu {
+  cursor_col: u64,
+  cursor_row: u64,
+  current_color: u64,
+  framebuffer: &u64,
+  out: &SimpleTextOutputProtocol
 }
 
-fn boot_mode_select_rom() {
-  const EEFC0_COMMAND_REGISTER: &u64 = 1074661892;
-  const EEFC0_STATUS_REGISTER: &u64 = 1074661896;
-  const CLEAR_BOOT_MODE_SELECTION_BIT_COMMAND: u64 = 1509949708;
-  *EEFC0_COMMAND_REGISTER = CLEAR_BOOT_MODE_SELECTION_BIT_COMMAND;
-  while *EEFC0_STATUS_REGISTER != 1 {}
+fn gpu_new(heap_p: &&u64, heap_limit: &u64, out: &SimpleTextOutputProtocol) -> &Gpu {
+  let mode = 0;
+  let cols = 0;
+  let rows = 0;
+  loop {
+    efi_call4(out.query_mode, out as u64, mode, &cols as u64, &rows as u64);
+    if cols == NUM_COLS && rows == NUM_ROWS + 1 { break; }
+    mode = mode + 1;
+  }
+  if efi_call2(out.set_mode, out as u64, mode) != 0 { return null; }
+
+  let gpu = mem_allocate(sizeof(Gpu), heap_p, heap_limit) as &Gpu;
+  let framebuffer = mem_allocate(NUM_COLS * NUM_ROWS * 2, heap_p, heap_limit);
+  if gpu != null && framebuffer != null {
+    gpu.cursor_col = 0;
+    gpu.cursor_row = 0;
+    gpu.current_color = 2;  /* green */
+    gpu.framebuffer = framebuffer;
+    gpu.out = out;
+  }
+  return gpu;
 }
 
-fn gpu_reset() {
-  const PIOB_ENABLE_REGISTER: &u64 = 1074663424;
-  const PIOB_OUTPUT_ENABLE_REGISTER: &u64 = 1074663440;
-  const PIOB_SET_OUTPUT_DATA_REGISTER: &u64 = 1074663472;
-  const PIOB_CLEAR_OUTPUT_DATA_REGISTER: &u64 = 1074663476;
-  const PIOB_PULL_UP_DISABLE_REGISTER: &u64 = 1074663520;
-  const PB12_PIN: u64 = 4096;
-
-  *PIOB_ENABLE_REGISTER = PB12_PIN;
-  *PIOB_OUTPUT_ENABLE_REGISTER = PB12_PIN;
-  *PIOB_PULL_UP_DISABLE_REGISTER = PB12_PIN;
-  *PIOB_CLEAR_OUTPUT_DATA_REGISTER = PB12_PIN;
-  delay(10);
-  *PIOB_SET_OUTPUT_DATA_REGISTER = PB12_PIN;
-  delay(10);
+fn gpu_set_cursor(self: &Gpu, col: u64, row: u64) {
+  if col >= NUM_COLS || row >= NUM_ROWS { return; }
+  self.cursor_col = col;
+  self.cursor_row = row;
 }
 
-fn spi_init() {
-  const PIOA_DISABLE_REGISTER: &u64 = 1074662916;
-  const PA25_26_27_28_PINS: u64 = 503316480;
-  *PIOA_DISABLE_REGISTER = PA25_26_27_28_PINS;
-
-  const PMC_PERIPHERAL_CLOCK_ENABLE_REGISTER: &u64 = 1074660880;
-  const SPI_ID: u64 = 16777216;
-  *PMC_PERIPHERAL_CLOCK_ENABLE_REGISTER = SPI_ID;
-
-  const SPI_CONTROL_REGISTER: &u64 = 1073774592;
-  const SPI_MODE_REGISTER: &u64 = 1073774596;
-  const SPI_CHIP_SELECT_REGISTER: &u64 = 1073774640;
-  *SPI_MODE_REGISTER = 1; /*Set master mode*/
-  *SPI_CONTROL_REGISTER = 1; /*Enable*/
-  *SPI_CHIP_SELECT_REGISTER = 5506; /*4MHz, 16bits, rising edge*/
+fn gpu_draw_cursor(self: &Gpu, col: u64, row: u64) {
+  if col >= NUM_COLS || row >= NUM_ROWS { return; }
+  let ptr = self.framebuffer + (col + row * NUM_COLS) * 2 + 1;
+  store8(ptr, self.current_color << 4 | (self.current_color >> 4));
 }
 
-fn spi_transfer(data: u64) -> u64 {
-  const SPI_RECEIVE_DATA_REGISTER: &u64 = 1073774600;
-  const SPI_TRANSMIT_DATA_REGISTER: &u64 = 1073774604;
-  const SPI_STATUS_REGISTER: &u64 = 1073774608;
-
-  while (*SPI_STATUS_REGISTER & 2) == 0 {} /*Wait transmitter ready*/
-  *SPI_TRANSMIT_DATA_REGISTER = data;
-
-  while (*SPI_STATUS_REGISTER & 1) == 0 {} /*Wait data received*/
-  return *SPI_RECEIVE_DATA_REGISTER;
-}
-
-fn gpu_set_register(register : u64, value : u64) {
-  const SELECT_REGISTER: u64 = 32768;
-  spi_transfer(SELECT_REGISTER | register);
-  spi_transfer(value & 255);
-}
-
-fn gpu_set_register_or_wait(register : u64, value : u64) {
-  if register != 0 {
-    gpu_set_register(register, value);
-  } else {
-    delay(value);
+fn gpu_clear_screen(self: &Gpu) {
+  let ptr = self.framebuffer;
+  let end = ptr + NUM_COLS * NUM_ROWS * 2;
+  let value = ' ' << 48 | ' ' << 32 | ' ' << 16 | ' ';
+  while ptr < end {
+    *ptr = value;
+    ptr = ptr + 8;
   }
 }
 
-static GPU_INIT_COMMANDS = [
-  136,   6, /*PLL Control 1*/
-  0,     1, /*delay 1ms*/
-  137,   1, /*PLL Control 2*/
-  0,     1, /*delay 1ms*/
-  4,   129, /*Pixel Clock Setting*/
-  20,   99, /*Horizontal Display Width*/
-  21,    4, /*Horizontal Non-Display Period Fine Tuning*/
-  22,    3, /*Horizontal Non-Display Period*/
-  23,   25, /*HSYNC Start Position*/
-  25,  223, /*Vertical Display Height 0*/
-  26,    1, /*Vertical Display Height 1*/
-  27,   21, /*Vertical Non-Display Period 0*/
-  29,   21, /*VSYNC Start Position*/
-  142, 128, /*Memory Clear Control*/
-  0,   100, /*delay 100ms*/
-  1,   128, /*Power And Display Control*/
-  199,   1, /*Extra General Purpose IO*/
-  138,  64, /*PWM1 Control*/
-  52,   31, /*Horizontal End Point of Active Window 0*/
-  53,    3, /*Horizontal End Point of Active Window 1*/
-  54,  223, /*Vertical End Point of Active Window 0*/
-  55,    1, /*Vertical End Point of Active Window 1*/
-  64,  224, /*Memory Write Control 0*/
-  68,   30  /*Blink Time Control*/
-];
+fn gpu_draw_char(self: &Gpu, c: u64) {
+  let ptr = self.framebuffer + (self.cursor_col + self.cursor_row * NUM_COLS) * 2;
+  store8(ptr, c);
+  store8(ptr + 1, self.current_color);
+  self.cursor_col = self.cursor_col + 1;
+  if self.cursor_col == NUM_COLS {
+    self.cursor_col = 0;
+    self.cursor_row = self.cursor_row + 1;
+    if self.cursor_row == NUM_ROWS {
+      self.cursor_row = 0;
+    }
+  }
+}
 
-fn gpu_init() {
-  gpu_reset();
-  spi_init();
-  let ptr = GPU_INIT_COMMANDS;
-  while ptr < GPU_INIT_COMMANDS + 48 {
-    gpu_set_register_or_wait(load8(ptr), load8(ptr + 1));
+fn gpu_switch_buffer(self: &Gpu) {
+  let out = self.out;
+  efi_call3(out.set_cursor_position, out as u64, 0, 0);
+  let ptr = self.framebuffer;
+  let end = ptr + NUM_COLS * NUM_ROWS * 2;
+  let char = 0;
+  while ptr < end {
+    char = load8(ptr);
+    efi_call2(out.set_attribute, out as u64, load8(ptr + 1));
+    efi_call2(out.output_string, out as u64, &char as u64);
     ptr = ptr + 2;
   }
 }
 
-static CHARACTERS = [
-  0, 136, 0, 132, 130, 128, 129, 139, 0, 137, 135, 133, 131, 9, 96, 0, 0,
-  141, 0, 0, 140, 113, 49, 0, 0, 0, 122, 115, 97, 119, 50, 0, 0,
-  99, 120, 100, 101, 52, 51, 0, 0, 32, 118, 102, 116, 114, 53, 0, 0,
-  110, 98, 104, 103, 121, 54, 0, 0, 0, 109, 106, 117, 55, 56, 0, 0,
-  44, 107, 105, 111, 48, 57, 0, 0, 46, 47, 108, 59, 112, 45, 0, 0,
-  0, 39, 0, 91, 61, 0, 0, 143, 0, 10, 93, 0, 92, 0, 0, 0,
-  0, 0, 0, 0, 0, 8, 0, 0, 49, 0, 52, 55, 0, 0, 0, 48,
-  46, 50, 53, 54, 56, 27, 142, 138, 43, 51, 45, 42, 57, 144, 0, 0,
-  0, 0, 134,
-  0, 136, 0, 132, 130, 128, 129, 139, 0, 137, 135, 133, 131, 9, 126, 0, 0,
-  141, 0, 0, 140, 81, 33, 0, 0, 0, 90, 83, 65, 87, 64, 0, 0,
-  67, 88, 68, 69, 36, 35, 0, 0, 32, 86, 70, 84, 82, 37, 0, 0,
-  78, 66, 72, 71, 89, 94, 0, 0, 0, 77, 74, 85, 38, 42, 0, 0,
-  60, 75, 73, 79, 41, 40, 0, 0, 62, 63, 76, 58, 80, 95, 0, 0,
-  0, 34, 0, 123, 43, 0, 0, 143, 0, 10, 125, 0, 124, 0, 0, 0,
-  0, 0, 0, 0, 0, 8, 0, 0, 49, 0, 52, 55, 0, 0, 0, 48,
-  46, 50, 53, 54, 56, 27, 142, 138, 43, 51, 45, 42, 57, 144, 0, 0,
-  0, 0, 134];
-
-const KEYBOARD_HANDLER_STATE: &u64 = 1074666128;
-const KEYBOARD_HANDLER_SHIFT: &u64 = 1074666132;
-const KEYBOARD_HANDLER_CHAR: &u64 = 1074666136;
-
-const NVIC_INTERRUPT_SET_ENABLE_REGISTER: &u64 = 3758153984;
-const NVIC_INTERRUPT_CLEAR_ENABLE_REGISTER: &u64 = 3758154112;
-const USART_ID: u64 = 131072;
-
-fn keyboard_init() {
-  *KEYBOARD_HANDLER_STATE = 0;
-  *KEYBOARD_HANDLER_SHIFT = 0;
-  *KEYBOARD_HANDLER_CHAR = 0;
-
-  const PIOA_ENABLE_REGISTER: &u64 = 1074662912;
-  const PA10_17_PINS: u64 = 132096;
-  *PIOA_ENABLE_REGISTER = PA10_17_PINS;
-
-  const PMC_PERIPHERAL_CLOCK_ENABLE_REGISTER: &u64 = 1074660880;
-  *PMC_PERIPHERAL_CLOCK_ENABLE_REGISTER = USART_ID;
-
-  const USART_CONTROL_REGISTER: &u64 = 1074364416;
-  const USART_MODE_REGISTER: &u64 = 1074364420;
-  const USART_INTERRUPT_ENABLE_REGISTER: &u64 = 1074364424;
-
-  *USART_MODE_REGISTER = 1008; /*PS/2 protocol configuration*/
-  *USART_INTERRUPT_ENABLE_REGISTER = 1; /*Enable RX ready interrupt*/
-  *NVIC_INTERRUPT_SET_ENABLE_REGISTER = USART_ID;
-  *USART_CONTROL_REGISTER = 16; /*Enable receiver*/
+fn gpu_set_register(self: &Gpu, register: u64, value: u64) {
+  if register == 0 { gpu_draw_char(self, value); }
+  else if register == 1 { gpu_set_cursor(self, value & 255, value >> 8); }
+  else if register == 2 { gpu_draw_cursor(self, value & 255, value >> 8); }
+  else if register == 3 { self.current_color = value; }
+  else if register == 4 { gpu_clear_screen(self); }
+  else if register == 5 { gpu_switch_buffer(self); }
 }
 
-fn keyboard_put_char(c: u64) {
-  if *KEYBOARD_HANDLER_CHAR == 0 {
-    *KEYBOARD_HANDLER_CHAR = c;
+fn keyboard_get_char(in: &SimpleTextInputProtocol) -> u64 {
+  let key = 0;
+  if efi_call2(in.read_key_stroke, in as u64, &key as u64) == 0 {
+    if key <= 23 { return key + 128; }
+    key = key >> 16;
+    if key == 13 /*carriage return*/ { key = 10; /*linefeed*/ }
   }
+  return key;
 }
 
-fn keyboard_get_char() -> u64 {
-  *NVIC_INTERRUPT_CLEAR_ENABLE_REGISTER = USART_ID;
-  let c = *KEYBOARD_HANDLER_CHAR;
-  *KEYBOARD_HANDLER_CHAR = 0;
-  *NVIC_INTERRUPT_SET_ENABLE_REGISTER = USART_ID;
-  return c;
-}
-
-fn keyboard_wait_char() -> u64 {
+fn keyboard_wait_char(in: &SimpleTextInputProtocol) -> u64 {
   let c = 0;
-  while c == 0 { c = keyboard_get_char(); }
+  while c == 0 { c = keyboard_get_char(in); }
   return c;
-}
-
-const SKIP_CODE: u64 = 0;
-const RELEASE_SHIFT: u64 = 1;
-const PRESS_SHIFT: u64 = 2;
-const PUT_EXTENDED_CODE: u64 = 3;
-const PUT_CODE: u64 = 4;
-
-fn keyboard_handle_code(action: u64, scancode: u64) {
-  if action == RELEASE_SHIFT {
-    *KEYBOARD_HANDLER_SHIFT = 0;
-  } else if action == PRESS_SHIFT {
-    *KEYBOARD_HANDLER_SHIFT = 132;
-  } else if action == PUT_EXTENDED_CODE {
-    keyboard_put_char(scancode + 128);
-  } else if action == PUT_CODE {
-    keyboard_put_char(load8(CHARACTERS + scancode + *KEYBOARD_HANDLER_SHIFT));
-  }
-}
-
-static TRANSITION_TABLE = [
-  4, 0, 0, 30, 0, 20, 0, 10, 2, 0,
-  0, 0, 0, 0, 0, 0, 0, 0, 1, 0,
-  3, 0, 0, 0, 0, 0, 0, 40, 0, 0,
-  0, 10, 0, 0, 0, 0, 0, 10, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-
-fn keyboard_action_column(scancode : u64) -> u64 {
-  if scancode == 18 { return 8; }
-  if scancode < 132 { return 0; }
-  if scancode == 224 { return 4; }
-  if scancode == 240 { return 6; }
-  return 2;
-}
-
-fn keyboard_handler() {
-  const USART_RECEIVER_HOLDING_REGISTER: &u64 = 1074364440;
-  let scancode = *USART_RECEIVER_HOLDING_REGISTER;
-  let cell = TRANSITION_TABLE + *KEYBOARD_HANDLER_STATE + keyboard_action_column(scancode);
-  keyboard_handle_code(load8(cell), scancode);
-  *KEYBOARD_HANDLER_STATE = load8(cell + 1);
 }

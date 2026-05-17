@@ -1,0 +1,19 @@
+fn efi_call1(fn1: &Fn, a: u64) -> u64 []
+fn efi_call2(fn2: &Fn, a: u64, b: u64) -> u64 []
+fn efi_call3(fn3: &Fn, a: u64, b: u64, c: u64) -> u64 []
+fn efi_call4(fn4: &Fn, a: u64, b: u64, c: u64, d: u64) -> u64 []
+fn efi_call5(fn5: &Fn, a: u64, b: u64, c: u64, d: u64, e: u64) -> u64 [
+  72, 137, 229,         /* mov rbp,rsp */
+  72, 131, 236, 40,     /* sub rsp,40 */
+  72, 131, 228, 240,    /* and rsp,0xfffffffffffffff0 */
+  77, 137, 198,         /* mov r14,r8 */
+  76, 137, 201,         /* mov rcx,r9 */
+  76, 137, 210,         /* mov rdx,r10 */
+  77, 137, 216,         /* mov r8,r11 */
+  77, 137, 225,         /* mov r9,r12 */
+  76, 137, 108, 36, 32, /* mov [rsp+32],r13 */
+  65, 255, 214,         /* call r14 */
+  73, 137, 192,         /* mov r8,rax */
+  72, 137, 236,         /* mov rsp,rbp */
+  195                   /* ret */
+]

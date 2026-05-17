@@ -1,0 +1,32 @@
+fn error_result(error: u64) -> u64 { return error << 56; }
+
+/*
+ * An alternative 'main' function for the Toy compiler, without any dependency on Toys.
+ * In particular, file inputs and outputs are replaced with memory buffers.
+ * This allows calling it from C, without any emulator, for testing purposes.
+ */
+fn main(src: &u64, src_end: &u64, heap: &u64, heap_limit: &u64) -> u64 {
+  const MAX_CODE_SIZE: u64 = 20480;
+  const MAX_HEAP_SIZE: u64 = 49152;
+  if heap_limit < heap + MAX_CODE_SIZE + sizeof(Compiler) + MAX_HEAP_SIZE {
+    return error_result(1);
+  }
+  let compiler = (heap + MAX_CODE_SIZE) as &Compiler;
+  compiler.src = src - 1;
+  compiler.src_end = src_end;
+  compiler.dst = heap;
+  compiler.dst_limit = compiler as &u64;
+  compiler.heap = compiler.dst_limit + sizeof(Compiler);
+  compiler.heap_limit = compiler.heap + MAX_HEAP_SIZE;
+  compiler.symbols = null;
+  let error = 0;
+  error = panic_result();
+  if error != 0 {
+    return error_result(error) | (compiler.src - src);
+  }
+  tc_read_char(compiler);
+  tc_read_token(compiler);
+  tc_parse_program(compiler);
+  tc_check_symbols(compiler.symbols, null);
+  return compiler.dst - heap;
+}

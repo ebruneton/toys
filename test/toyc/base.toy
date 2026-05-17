@@ -1,0 +1,39 @@
+fn main(src: &u64, src_end: &u64, heap: &u64, heap_limit: &u64) -> u64;
+
+/*
+ * Entry point, called from C code using the System V calling convention:
+ *  https://en.wikipedia.org/wiki/X86_calling_conventions#x86-64_calling_conventions
+ * Calls 'entry' with the same arguments, using the Toy calling conventions:
+ *  - move the arguments in rdi,rsi,rdx,rcx to r8,r9,r10,r11
+ *  - save the callee-saved registers used by the Toy compiler (r12 to r15)
+ *  - restore these registers when the call returns
+ *  - move the result from r8 to rax
+ */
+fn c_entry(src: &u64, src_end: &u64, heap: &u64, heap_limit: &u64) -> u64 [
+  73, 137, 248,      /* mov r8,rdi */
+  73, 137, 241,      /* mov r9,rsi */
+  73, 137, 210,      /* mov r10,rdx */
+  73, 137, 203,      /* mov r11,rcx */
+  65, 84,            /* push r12 */
+  65, 85,            /* push r13 */
+  65, 86,            /* push r14 */
+  65, 87,            /* push r15 */
+  232, 12, 0, 0, 0,  /* call 'entry' */
+  65, 95,            /* pop r15 */
+  65, 94,            /* pop r14 */
+  65, 93,            /* pop r13 */
+  65, 92,            /* pop r12 */
+  76, 137, 192,      /* mov rax,r8 */
+  195                /* ret */
+]
+
+fn entry(src: &u64, src_end: &u64, heap: &u64, heap_limit: &u64) -> u64 {
+  return main(src, src_end, heap, heap_limit);
+}
+
+fn load8(ptr: &u64) -> u64  [ 69,15,182,0, /*movzxb r8d,[r8]*/ 195 /*ret*/ ]
+fn load16(ptr: &u64) -> u64 [ 69,15,183,0, /*movzxw r8d,[r8]*/ 195 /*ret*/ ]
+fn load32(ptr: &u64) -> u64 [ 69,139,0,    /*mov r8d,[r8] */   195 /*ret*/ ]
+fn store8(ptr: &u64, value: u64)  [ 69,136,8,     /*mov [r8],r9b*/ 195 /*ret*/ ]
+fn store16(ptr: &u64, value: u64) [ 102,69,137,8, /*mov [r8],r9w*/ 195 /*ret*/ ]
+fn store32(ptr: &u64, value: u64) [ 69,137,8,     /*mov [r8],r9d*/ 195 /*ret*/ ]

@@ -1,0 +1,51 @@
+fn mem_compare(ptr1: &u32, ptr2: &u32, size: u32) -> u32 {
+  let i = 0;
+  while i < size && load8(ptr1 + i) == load8(ptr2 + i) {
+    i = i + 1;
+  }
+  return size - i;
+}
+
+fn get_first_component_length(name: &u32, length: u32) -> u32 {
+  let i = 0;
+  while i < length && load8(name + i) != '/' { i = i + 1; }
+  if i < length { i = i + 1; }
+  return i;
+}
+
+static USAGE = ['U','s','a','g','e',':',' ',
+  'l','i','s','t',' ','[','p','a','t','h','/',']'];
+
+static SEPARATOR = [' ',' '];
+
+fn main(args: &u32, args_end: &u32, heap: &u32, heap_limit: &u32) -> u32 {
+  let path_length = 0;
+  let path = sh_read_token(&args, args_end, &path_length);
+  if path_length > 0 && load8(path + path_length - 1) != '/' {
+    write(STANDARD_OUTPUT, USAGE, 19);
+    return INVALID_ARGUMENT;
+  }
+  const MAX_NAME_LENGTH: u32 = 256;
+  let name = mem_allocate(MAX_NAME_LENGTH, &heap, heap_limit);
+  let last_item = mem_allocate(MAX_NAME_LENGTH, &heap, heap_limit);
+  if name == null || last_item == null { return OUT_OF_MEMORY; }
+
+  let stream = open(name, 0, 'r');
+  let length = read(stream, name, MAX_NAME_LENGTH);
+  let last_length = 0;
+  let item: &u32 = null;
+  while length != 0 {
+    if length > path_length && mem_compare(name, path, path_length) == 0 {
+      item = name + path_length;
+      length = get_first_component_length(item, length - path_length);
+      if length != last_length || mem_compare(item, last_item, length) != 0 {
+        write(STANDARD_OUTPUT, item, length);
+        write(STANDARD_OUTPUT, SEPARATOR, 2);
+        mem_copy_non_overlapping(item, last_item, length);
+        last_length = length;
+      }
+    }
+    length = read(stream, name, MAX_NAME_LENGTH);
+  }
+  return OK;
+}

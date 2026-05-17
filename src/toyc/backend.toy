@@ -1,0 +1,247 @@
+fn mem_allocate(size: u32, ptr_p: &&u32, ptr_limit: &u32) -> &u32 {
+  let ptr = *ptr_p;
+  if size > ptr_limit as u32 || ptr > ptr_limit - size { panic(1); }
+  *ptr_p = ptr + size;
+  return ptr;
+}
+
+fn tc_write8(self: &Compiler, value: u32) {
+  store8(mem_allocate(1, &self.dst, self.dst_limit), value);
+}
+
+fn tc_write16(self: &Compiler, value: u32) {
+  store16(mem_allocate(2, &self.dst, self.dst_limit), value);
+}
+
+fn tc_write32(self: &Compiler, value: u32) {
+  *mem_allocate(4, &self.dst, self.dst_limit) = value;
+}
+
+fn tc_write_padding(self: &Compiler) {
+  if self.dst as u32 & 1 == 1 { tc_write8(self, 0); }
+}
+
+fn tc_write_move16_insn(self: &Compiler, z: u32, c: u32, top: u32) {
+  tc_write32(self, /*MOVW_RZ_C*/62016 | (((c >> 8) & 7) << 28) |
+      (z << 24) | ((c & 255) << 16) | (((c >> 11) & 1) << 10) |
+      (top << 7) | ((c >> 12) & 15));
+}
+
+fn tc_write_add_or_sub_insn(self: &Compiler, op: u32, z: u32, y: u32) {
+  tc_write16(self, op | (y << 6) | (z << 3) | z);
+}
+
+fn tc_write_add_const_insn(self: &Compiler, op: u32, z: u32, c: u32) {
+  if c > 255 { panic(100); }
+  tc_write16(self, op | (z << 8) | c);
+}
+
+fn tc_write_math_insn(self: &Compiler, op: u32, z: u32, x: u32) {
+  tc_write16(self, op | (x << 3) | z);
+}
+
+fn tc_write_stack_insn(self: &Compiler, op: u32, z: u32, c: u32) {
+  if c > 255 { panic(101); }
+  tc_write16(self, op | (z << 8) | c);
+}
+
+fn tc_write_heap_insn(self: &Compiler, op: u32, z: u32, x: u32, c: u32) {
+  if c > 31 { panic(102); }
+  tc_write16(self, op | (c << 6) | (x << 3) | z);
+}
+
+fn tc_get_branch_insn(dst: &u32, target: &u32) -> u32 {
+  let pc = dst + 4;
+  if target >= pc + 2048 || pc > target + 2048 { panic(103); }
+  return /*B_2C*/57344 | (((target - pc) & /*(1<<12)-1*/4095) >> 1);
+}
+
+fn tc_get_branch_with_link_insn(dst: &u32, target: &u32) -> u32 {
+  let pc = dst + 4;
+  if target >= pc + 4194304 || pc > target + 4194304 { panic(104); }
+  let offset = (target - pc) & /*(1<<23)-1*/8388607;
+  return /*BL_2C*/4160811008 | ((offset & 4095) << 15) | (offset >> 12);
+}
+
+fn tc_write_placeholder(self: &Compiler, placeholder_p: &&u32) {
+  let new_placeholder = self.dst;
+  let last_placeholder = *placeholder_p;
+  *placeholder_p = new_placeholder;
+  if last_placeholder == null { last_placeholder = new_placeholder; }
+  tc_write16(self, new_placeholder - last_placeholder);
+}
+
+fn tc_fill_placeholders(placeholder: &u32, value: u32) {
+  let previous: &u32 = null;
+  while placeholder != null {
+    previous = *placeholder as &u32;
+    *placeholder = tc_get_branch_with_link_insn(placeholder, value as &u32);
+    placeholder = previous;
+  }
+}
+
+fn tc_fill_label_placeholders(self: &Compiler, placeholder: &u32) {
+  let offset = 0;
+  while placeholder != null {
+    offset = load16(placeholder);
+    store16(placeholder, tc_get_branch_insn(placeholder, self.dst));
+    if offset == 0 { break; }
+    placeholder = placeholder - offset;
+  }
+}
+
+const MAX_REGISTERS: u32 = 8;
+
+fn tc_new_register(self: &Compiler) -> u32 {
+  let register = self.next_register;
+  if register >= MAX_REGISTERS { panic(105); }
+  self.next_register = register + 1;
+  return register;
+}
+
+fn tc_save_registers(self: &Compiler, n: u32, link_register: u32) {
+  tc_write16(self, /*PUSH*/46080 | (link_register << 8) | ((1 << n) - 1));
+  self.frame_size = self.frame_size + n;
+  self.next_register = 0;
+}
+
+fn tc_write_cst_insn(self: &Compiler, value: u32) {
+  let register = tc_new_register(self);
+  if value < 256 {
+    tc_write16(self, /*MOV_RZ_C*/8192 | (register << 8) | value);
+  } else {
+    tc_write_move16_insn(self, register, value, 0);
+    if (value >> 16) != 0 {
+      tc_write_move16_insn(self, register, value >> 16, 1);
+    }
+  }
+}
+
+fn tc_write_static_insn(self: &Compiler, dst: u32) {
+  let z = tc_new_register(self);
+  let offset = (((self.dst as u32 + 4) >> 2) << 2) - dst;
+  if offset > 4095 { panic(106); }
+  tc_write32(self, /*ADR_RZ_C*/62127 | (((offset >> 8) & 7) << 28) |
+      (z << 24) | ((offset & 255) << 16) | (((offset >> 11) & 1) << 10));
+}
+
+fn tc_write_binary_insn(self: &Compiler, token: u32) {
+  let y = self.next_register - 1;
+  let z = y - 1;
+  if token == TC_ADD {
+    tc_write_add_or_sub_insn(self, /*ADD_RZ_RX_RY*/6144, z, y);
+  } else if token == TC_SUB {
+    tc_write_add_or_sub_insn(self, /*SUB_RZ_RX_RY*/6656, z, y);
+  } else if token == TC_MUL {
+    tc_write_math_insn(self, /*MUL_RZ_RZ_RX*/17216, z, y);
+  } else if token == TC_DIV {
+    tc_write32(self, /*UDIV_RZ_RX_RY*/4042324912 | z << 24 | y << 16 | z);
+  } else if token == TC_BIT_AND {
+    tc_write_math_insn(self, /*AND_RZ_RZ_RX*/16384, z, y);
+  } else if token == TC_BIT_OR {
+    tc_write_math_insn(self, /*ORR_RZ_RZ_RX*/17152, z, y);
+  } else if token == TC_SHIFT_LEFT {
+    tc_write_math_insn(self, /*LSL_RZ_RZ_RX*/16512, z, y);
+  } else {
+    tc_write_math_insn(self, /*LSR_RZ_RZ_RX*/16576, z, y);
+  }
+  self.next_register = y;
+}
+
+static IF_THEN_CONDITION = [48, 0, 128, 144, 16, 32];
+
+fn tc_write_jump_insn(self: &Compiler, token: u32, placeholder_p: &&u32) {
+  tc_write16(self, /*CMP_R0_R1*/17032);
+  tc_write16(self, /*IT*/48904 | load8(IF_THEN_CONDITION + token - TC_LT));
+  tc_write_placeholder(self, placeholder_p);
+  self.next_register = 0;
+}
+
+fn tc_write_goto_insn(self: &Compiler, placeholder_p: &&u32) {
+  tc_write_placeholder(self, placeholder_p);
+}
+
+fn tc_write_loop_insn(self: &Compiler, loop_dst: &u32) {
+  tc_write16(self, tc_get_branch_insn(self.dst, loop_dst));
+}
+
+fn tc_write_load_insn(self: &Compiler, field: u32) {
+  let z = self.next_register - 1;
+  tc_write_heap_insn(self, /*LDR_RZ_RX_4C*/26624, z, z, field);
+}
+
+fn tc_erase_load_insn(self: &Compiler) { self.dst = self.dst - 2; }
+
+fn tc_write_store_insn(self: &Compiler, field: u32) {
+  tc_write_heap_insn(self, /*STR_RZ_RX_4C*/24576, 1, 0, field);
+  self.next_register = 0;
+}
+
+fn tc_write_address_of_insn(self: &Compiler, field: u32) {
+  let z = self.next_register - 1;
+  if field != 0 {
+    tc_write_add_const_insn(self, /*ADD_RZ_RZ_C*/12288, z, field << 2);
+  }
+}
+
+fn tc_write_ptr_insn(self: &Compiler, variable: u32) {
+  tc_write_add_const_insn(self, /*ADD_RZ_SP_4C*/43008,
+      tc_new_register(self), self.frame_size - variable);
+}
+
+fn tc_write_get_insn(self: &Compiler, variable: u32) {
+  tc_write_stack_insn(self, /*LDR_RZ_SP_4C*/38912,
+      tc_new_register(self), self.frame_size - variable);
+}
+
+fn tc_erase_get_insn(self: &Compiler) {
+  self.dst = self.dst - 2;
+  self.next_register = self.next_register - 1;
+}
+
+fn tc_write_set_insn(self: &Compiler, variable: u32) {
+  tc_write_stack_insn(self, /*STR_RZ_SP_4C*/36864, 0, self.frame_size - variable);
+  self.next_register = 0;
+}
+
+fn tc_write_pop_insn(self: &Compiler) { self.next_register = 0; }
+
+fn tc_write_fn_insn(self: &Compiler, arity: u32) {
+  if arity > MAX_REGISTERS { panic(107); }
+  self.frame_size = 0;
+  tc_save_registers(self, arity, 1);
+}
+
+fn tc_get_fn_value(self: &Compiler, fn_dst: u32) -> u32 { return fn_dst; }
+
+fn tc_write_call_insn(self: &Compiler, function: &Symbol, saved_registers: u32)
+{
+  let dst = self.dst;
+  if function.kind == SYM_FORWARD_FN {
+    tc_write32(self, function.value);
+    function.value = dst as u32;
+  } else {
+    tc_write32(self, tc_get_branch_with_link_insn(dst, function.value as &u32));
+  }
+  if function.type.kind != SYM_VOID {
+    if saved_registers != 0 {
+      tc_write16(self, /*MOV_RZ_R0*/17920 | saved_registers);
+    }
+    if saved_registers >= MAX_REGISTERS { panic(108); }
+    self.next_register = saved_registers + 1;
+  } else {
+    self.next_register = saved_registers;
+  }
+  if saved_registers != 0 {
+    tc_write16(self, /*POP*/48128 | ((1 << saved_registers) - 1));
+    self.frame_size = self.frame_size - saved_registers;
+  }
+}
+
+fn tc_write_return_insn(self: &Compiler) {
+  let offset = self.frame_size;
+  if offset > 127 { panic(109); }
+  if offset != 0 { tc_write16(self, /*ADD_SP_SP_4C*/45056 | offset); }
+  tc_write16(self, /*POP_PC*/48384);
+  self.next_register = 0;
+}

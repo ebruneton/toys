@@ -1,0 +1,231 @@
+const NUM_COMMANDS: u32 = 4;
+const MAX_COMMAND_LENGTH: u32 = 196;
+const MAX_OUTPUT_SIZE: u32 = 512;
+
+struct Command {
+  previous: &Command,
+  next: &Command,
+  length: u32,
+  data: u32
+}
+
+struct Shell {
+  commands: &Command,
+  output_begin: &u32,
+  output_end: &u32,
+  output_limit: &u32
+}
+
+fn command_copy(src: &Command, dst: &Command) {
+  dst.length = src.length;
+  mem_copy_non_overlapping(&src.data, &dst.data, src.length);
+}
+
+fn sh_new(heap_p: &&u32, heap_limit: &u32) -> &Shell {
+  let shell = mem_allocate(sizeof(Shell), heap_p, heap_limit) as &Shell;
+  let command_size = sizeof(Command) - 4 + MAX_COMMAND_LENGTH;
+  let command =
+      mem_allocate(NUM_COMMANDS * command_size, heap_p, heap_limit) as &Command;
+  let output = mem_allocate(MAX_OUTPUT_SIZE, heap_p, heap_limit);
+  if shell == null || command == null || output == null { return null; }
+  shell.commands = command;
+  shell.output_begin = output;
+  shell.output_end = output;
+  shell.output_limit = output + MAX_OUTPUT_SIZE;
+  let i = 0;
+  let previous_command = command + (NUM_COMMANDS - 1) * command_size;
+  while i < NUM_COMMANDS {
+    previous_command.next = command;
+    command.previous = previous_command;
+    command.length = 0;
+    previous_command = command;
+    command = command + command_size;
+    i = i + 1;
+  }
+  return shell;
+}
+
+fn sh_print(self: &Shell, src: &u32, length: u32) {
+  if length > self.output_limit - self.output_end {
+    length = self.output_limit - self.output_end;
+  }
+  mem_copy_non_overlapping(src, self.output_end, length);
+  self.output_end = self.output_end + length;
+}
+
+static CANT_FIND = ['C','a','n',''','t',' ','f','i','n','d',' '];
+static CANT_OPEN = ['C','a','n',''','t',' ','o','p','e','n',' '];
+static CANT_READ = ['C','a','n',''','t',' ','r','e','a','d',' '];
+static CANT_LAUNCH = ['C','a','n',''','t',' ','l','a','u','n','c','h',' '];
+static NOT_ENOUGH_MEMORY = ['O','u','t',' ','o','f',' ','m','e','m','o','r','y'];
+static CRASHED = [' ','c','r','a','s','h','e','d'];
+
+const NEW_LINE: u32 = 10;
+
+fn sh_run(self: &Shell, src: &u32, src_end: &u32) {
+  let length = 0;
+  let name = sh_read_token(&src, src_end, &length);
+  if name == null { return; }
+  let old_end = self.output_end;
+  let result = spawn(self.output_limit, name, length, src, src_end - src, &self.output_end);
+  if status(result) == NOT_FOUND {
+    sh_print(self, CANT_FIND, 11);
+    sh_print(self, name, length);
+  } else if status(result) != OK {
+    sh_print(self, CANT_LAUNCH, 13);
+    sh_print(self, name, length);
+  } else if result == OUT_OF_MEMORY {
+    sh_print(self, NOT_ENOUGH_MEMORY, 13);
+  } else if result == INTERNAL_ERROR {
+    sh_print(self, name, length);
+    sh_print(self, CRASHED, 8);
+  }
+  let new_line = NEW_LINE;
+  if self.output_end > old_end && load8(self.output_end - 1) != NEW_LINE {
+    sh_print(self, &new_line, 1);
+  }
+}
+
+fn sh_run_script(self: &Shell, name: &u32, length: u32) -> u32 {
+  let stream = open(name, length, 'r');
+  if status(stream) != OK {
+    write(STANDARD_OUTPUT, CANT_OPEN, 11);
+    write(STANDARD_OUTPUT, name, length);
+    return status(stream);
+  }
+  let src = &self.commands.data;
+  let src_end = src;
+  let c = 0;
+  let n = 0;
+  loop {
+    n = read(stream, &c, 1);
+    if status(n) != OK {
+      sh_print(self, CANT_READ, 11);
+      sh_print(self, name, length);
+      break;
+    } else if n == 0 {
+      sh_run(self, src, src_end);
+      break;
+    } else if c == NEW_LINE {
+      if src_end > src && load8(src_end - 1) == '\' {
+        src_end = src_end - 1;
+      } else {
+        sh_run(self, src, src_end);
+        src_end = src;
+      }
+    } else if src_end - src < MAX_COMMAND_LENGTH {
+      store8(src_end, c);
+      src_end = src_end + 1;
+    }
+  }
+  write(STANDARD_OUTPUT, self.output_begin, self.output_end - self.output_begin);
+  return status(n);
+}
+
+fn sh_draw_string(src: &u32, src_end: &u32, col: u32, row: &u32) {
+  let c = 0;
+  while src < src_end {
+    c = load8(src);
+    src = src + 1;
+    if c != NEW_LINE {
+      gpu_draw_char(c);
+      col = col + 1;
+    }
+    if c == NEW_LINE || col == 100 {
+      col = 0;
+      *row = *row + 1;
+      gpu_set_cursor(col, *row);
+    }
+  }
+}
+
+fn sh_draw_command(command: &Command, row: &u32) {
+  gpu_draw_char('>');
+  sh_draw_string(&command.data, &command.data + command.length, 1, row);
+  *row = *row + 1;
+}
+
+fn sh_draw(self: &Shell, current_command: &Command) {
+  gpu_clear_screen();
+  gpu_set_cursor(0, 0);
+  gpu_set_color(0, 7, 0);
+  let row = 0;
+  if current_command.previous.length > 0 {
+    sh_draw_command(current_command.previous, &row);
+    gpu_set_cursor(0, row);
+  }
+  if self.output_end > self.output_begin {
+    gpu_set_color(7, 7, 0);
+    sh_draw_string(self.output_begin, self.output_end, 0, &row);
+    gpu_set_cursor(0, row);
+    gpu_set_color(0, 7, 0);
+  }
+  sh_draw_command(current_command, &row);
+  gpu_switch_buffer();
+}
+
+const BACKSPACE_KEY: u32 = 8;
+const ENTER_KEY: u32 = 10;
+const ESCAPE_KEY: u32 = 27;
+const DELETE_KEY: u32 = 127;
+const ARROW_UP_KEY: u32 = 245;
+const ARROW_DOWN_KEY: u32 = 242;
+
+fn sh_run_editor(self: &Shell) -> u32 {
+  gpu_set_double_buffer();
+  let current = self.commands;
+  let history = current;
+  let c = 0;
+  loop {
+    sh_draw(self, current);
+    read(STANDARD_INPUT, &c, 1);
+    if c == ESCAPE_KEY {
+      gpu_set_single_buffer();
+      exit(OK);
+      gpu_set_double_buffer();
+    } else if c == ENTER_KEY {
+      self.output_end = self.output_begin;
+      sh_run(self, &current.data, &current.data + current.length);
+      gpu_set_double_buffer();
+      current = current.next;
+      current.length = 0;
+      history = current;
+    } else if c == ARROW_UP_KEY && history.previous != current {
+      history = history.previous;
+      command_copy(history, current);
+    } else if c == ARROW_DOWN_KEY && history != current {
+      history = history.next;
+      if history == current {
+        current.length = 0;
+      } else {
+        command_copy(history, current);
+      }
+    } else if c == BACKSPACE_KEY && current.length > 0 {
+      current.length = current.length - 1;
+    } else if c >= 32 && c < DELETE_KEY && current.length < MAX_COMMAND_LENGTH {
+      store8(&current.data + current.length, c);
+      current.length = current.length + 1;
+    }
+  }
+}
+
+static BANNER = ['s','r','c','/','s','h','e','l','l','/',
+  'b','a','n','n','e','r','.','t','x','t'];
+
+fn main(args: &u32, args_end: &u32, heap: &u32, heap_limit: &u32) -> u32 {
+  let shell = sh_new(&heap, heap_limit);
+  if shell == null { return OUT_OF_MEMORY; }
+  let length = 0;
+  let name = sh_read_token(&args, args_end, &length);
+  if name != null {
+    return sh_run_script(shell, name, length);
+  }
+  let stream = open(BANNER, 20, 'r');
+  let n = 0;
+  if status(stream) == OK {
+    n = read(stream, shell.output_begin, MAX_OUTPUT_SIZE);
+    if status(n) == OK { shell.output_end = shell.output_begin + n; }
+    close(stream);
+  }
+  return sh_run_editor(shell);
+}

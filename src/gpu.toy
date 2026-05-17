@@ -1,0 +1,49 @@
+fn gpu_set_register(id: u32, value: u32) {
+  let buffer = (value & 255) << 16 | (32768 /*Select Register*/ | id);
+  write(GPU, &buffer, 4);
+}
+
+fn gpu_set_double_buffer() {
+  gpu_set_register(32 /*Display Configuration*/, 128);
+  gpu_set_register(65 /*Memory Write Control 1*/, 1);
+}
+
+fn gpu_set_single_buffer() {
+  gpu_set_register(65 /*Memory Write Control 1*/, 0);
+  gpu_set_register(82 /*Layer Transparency 0*/, 0);
+  gpu_set_register(32 /*Display Configuration*/, 0);
+}
+
+fn gpu_switch_buffer() {
+  let buffer = 32768 /*Select Register*/ | 65 /*Memory Write Control 1*/;
+  write(GPU, &buffer, 2);
+  let layer = 0;
+  read(GPU, &layer, 1);
+  buffer = /*0 (Write Data) | */ 1 - layer;
+  write(GPU, &buffer, 2);
+  gpu_set_register(82 /*Layer Transparency 0*/, layer);
+}
+
+fn gpu_clear_screen() {
+  gpu_set_register(142 /*Memory Clear Control*/, 192);
+  let buffer = 0;
+  loop {
+    read(GPU, &buffer, 1);
+    if buffer & 128 == 0 { return; }
+  }
+}
+
+fn gpu_set_cursor(col: u32, row: u32) {
+  gpu_set_register(42 /*Font Write Cursor H Position 0*/, col << 3);
+  gpu_set_register(43 /*Font Write Cursor H Position 1*/, col >> 5);
+  gpu_set_register(44 /*Font Write Cursor V Position 0*/, row << 4);
+  gpu_set_register(45 /*Font Write Cursor V Position 1*/, row >> 4);
+}
+
+fn gpu_set_color(r: u32, g: u32, b: u32) {
+  gpu_set_register(99 /*Foreground Color 0*/, r);
+  gpu_set_register(100 /*Foreground Color 1*/, g);
+  gpu_set_register(101 /*Foreground Color 2*/, b);
+}
+
+fn gpu_draw_char(c: u32) { gpu_set_register(2, c); }

@@ -1,0 +1,269 @@
+fn os_init(code: &u32, heap: &u32, stack: &u32);
+
+fn os_spawn_shell();
+
+fn entry(code: &u32, heap: &u32, stack: &u32) {
+  os_init(code, heap, stack);
+  os_spawn_shell();
+}
+
+fn load8(ptr: &u32) -> u32 [ /*LDRB_R0_R0_0*/30720; /*MOV_PC_LR*/18167; ]
+fn load16(ptr: &u32) -> u32 [ /*LDRH_R0_R0_0*/34816; /*MOV_PC_LR*/18167; ]
+fn store8(ptr: &u32, value: u32) [ /*STRB_R1_R0_0*/ 28673; /*MOV_PC_LR*/ 18167;]
+
+fn clock_init() {
+  const EEFC0_MODE_REGISTER: &u32 = 1074661888;
+  const EEFC1_MODE_REGISTER: &u32 = 1074662400;
+  *EEFC0_MODE_REGISTER = 1536; /*wait=6*/
+  *EEFC1_MODE_REGISTER = 1536; /*wait=6*/
+
+  const PMC_MAIN_OSCILLATOR_REGISTER: &u32 = 1074660896;
+  const PMC_PHASE_LOCK_LOOP_REGISTER: &u32 = 1074660904;
+  const PMC_MASTER_CLOCK_REGISTER: &u32 = 1074660912;
+  const PMC_STATUS_REGISTER: &u32 = 1074660968;
+
+  *PMC_MAIN_OSCILLATOR_REGISTER = 3669769; /*Enable Crystal Oscillator*/
+  while (*PMC_STATUS_REGISTER & 1) == 0 {} /*Wait until ready*/
+
+  *PMC_MAIN_OSCILLATOR_REGISTER = 20446985; /*Select Crystal Oscillator*/
+  while (*PMC_STATUS_REGISTER & 65536) == 0 {} /*Wait until selected*/
+
+  *PMC_PHASE_LOCK_LOOP_REGISTER = 537280257; /*Configure Phase Lock Loop*/
+  while (*PMC_STATUS_REGISTER & 2) == 0 {} /*Wait until ready*/
+
+  *PMC_MASTER_CLOCK_REGISTER = 2; /*Select Phase Lock Loop output*/
+  while (*PMC_STATUS_REGISTER & 8) == 0 {} /*Wait until output ready*/
+
+  const SYSTICK_CONTROL_AND_STATUS_REGISTER: &u32 = 3758153744;
+  *SYSTICK_CONTROL_AND_STATUS_REGISTER = 1; /*Enable*/
+
+  const WATCHDOG_TIMER_MODE_REGISTER: &u32 = 1074666068;
+  *WATCHDOG_TIMER_MODE_REGISTER = 32768; /*Disable*/
+}
+
+fn delay(millis: u32) {
+  const SYSTICK_CONTROL_AND_STATUS_REGISTER: &u32 = 3758153744;
+  const SYSTICK_RELOAD_VALUE_REGISTER: &u32 = 3758153748;
+  const SYSTICK_CURRENT_VALUE_REGISTER: &u32 = 3758153752;
+
+  *SYSTICK_RELOAD_VALUE_REGISTER = 10500 * millis;
+  *SYSTICK_CURRENT_VALUE_REGISTER = 0;
+  /*Wait until timer counts from 1 to 0*/
+  while *SYSTICK_CONTROL_AND_STATUS_REGISTER & 65536 == 0 {}
+}
+
+fn boot_mode_select_rom() {
+  const EEFC0_COMMAND_REGISTER: &u32 = 1074661892;
+  const EEFC0_STATUS_REGISTER: &u32 = 1074661896;
+  const CLEAR_BOOT_MODE_SELECTION_BIT_COMMAND: u32 = 1509949708;
+  *EEFC0_COMMAND_REGISTER = CLEAR_BOOT_MODE_SELECTION_BIT_COMMAND;
+  while *EEFC0_STATUS_REGISTER != 1 {}
+}
+
+fn gpu_reset() {
+  const PIOB_ENABLE_REGISTER: &u32 = 1074663424;
+  const PIOB_OUTPUT_ENABLE_REGISTER: &u32 = 1074663440;
+  const PIOB_SET_OUTPUT_DATA_REGISTER: &u32 = 1074663472;
+  const PIOB_CLEAR_OUTPUT_DATA_REGISTER: &u32 = 1074663476;
+  const PIOB_PULL_UP_DISABLE_REGISTER: &u32 = 1074663520;
+  const PB12_PIN: u32 = 4096;
+
+  *PIOB_ENABLE_REGISTER = PB12_PIN;
+  *PIOB_OUTPUT_ENABLE_REGISTER = PB12_PIN;
+  *PIOB_PULL_UP_DISABLE_REGISTER = PB12_PIN;
+  *PIOB_CLEAR_OUTPUT_DATA_REGISTER = PB12_PIN;
+  delay(10);
+  *PIOB_SET_OUTPUT_DATA_REGISTER = PB12_PIN;
+  delay(10);
+}
+
+fn spi_init() {
+  const PIOA_DISABLE_REGISTER: &u32 = 1074662916;
+  const PA25_26_27_28_PINS: u32 = 503316480;
+  *PIOA_DISABLE_REGISTER = PA25_26_27_28_PINS;
+
+  const PMC_PERIPHERAL_CLOCK_ENABLE_REGISTER: &u32 = 1074660880;
+  const SPI_ID: u32 = 16777216;
+  *PMC_PERIPHERAL_CLOCK_ENABLE_REGISTER = SPI_ID;
+
+  const SPI_CONTROL_REGISTER: &u32 = 1073774592;
+  const SPI_MODE_REGISTER: &u32 = 1073774596;
+  const SPI_CHIP_SELECT_REGISTER: &u32 = 1073774640;
+  *SPI_MODE_REGISTER = 1; /*Set master mode*/
+  *SPI_CONTROL_REGISTER = 1; /*Enable*/
+  *SPI_CHIP_SELECT_REGISTER = 5506; /*4MHz, 16bits, rising edge*/
+}
+
+fn spi_transfer(data: u32) -> u32 {
+  const SPI_RECEIVE_DATA_REGISTER: &u32 = 1073774600;
+  const SPI_TRANSMIT_DATA_REGISTER: &u32 = 1073774604;
+  const SPI_STATUS_REGISTER: &u32 = 1073774608;
+
+  while (*SPI_STATUS_REGISTER & 2) == 0 {} /*Wait transmitter ready*/
+  *SPI_TRANSMIT_DATA_REGISTER = data;
+
+  while (*SPI_STATUS_REGISTER & 1) == 0 {} /*Wait data received*/
+  return *SPI_RECEIVE_DATA_REGISTER;
+}
+
+fn gpu_set_register(register : u32, value : u32) {
+  const SELECT_REGISTER: u32 = 32768;
+  spi_transfer(SELECT_REGISTER | register);
+  spi_transfer(value & 255);
+}
+
+fn gpu_set_register_or_wait(register : u32, value : u32) {
+  if register != 0 {
+    gpu_set_register(register, value);
+  } else {
+    delay(value);
+  }
+}
+
+static GPU_INIT_COMMANDS = [
+  136,   6, /*PLL Control 1*/
+  0,     1, /*delay 1ms*/
+  137,   1, /*PLL Control 2*/
+  0,     1, /*delay 1ms*/
+  4,   129, /*Pixel Clock Setting*/
+  20,   99, /*Horizontal Display Width*/
+  21,    4, /*Horizontal Non-Display Period Fine Tuning*/
+  22,    3, /*Horizontal Non-Display Period*/
+  23,   25, /*HSYNC Start Position*/
+  25,  223, /*Vertical Display Height 0*/
+  26,    1, /*Vertical Display Height 1*/
+  27,   21, /*Vertical Non-Display Period 0*/
+  29,   21, /*VSYNC Start Position*/
+  142, 128, /*Memory Clear Control*/
+  0,   100, /*delay 100ms*/
+  1,   128, /*Power And Display Control*/
+  199,   1, /*Extra General Purpose IO*/
+  138,  64, /*PWM1 Control*/
+  52,   31, /*Horizontal End Point of Active Window 0*/
+  53,    3, /*Horizontal End Point of Active Window 1*/
+  54,  223, /*Vertical End Point of Active Window 0*/
+  55,    1, /*Vertical End Point of Active Window 1*/
+  64,  224, /*Memory Write Control 0*/
+  68,   30  /*Blink Time Control*/
+];
+
+fn gpu_init() {
+  gpu_reset();
+  spi_init();
+  let ptr = GPU_INIT_COMMANDS;
+  while ptr < GPU_INIT_COMMANDS + 48 {
+    gpu_set_register_or_wait(load8(ptr), load8(ptr + 1));
+    ptr = ptr + 2;
+  }
+}
+
+static CHARACTERS = [
+  0, 136, 0, 132, 130, 128, 129, 139, 0, 137, 135, 133, 131, 9, 96, 0, 0,
+  141, 0, 0, 140, 113, 49, 0, 0, 0, 122, 115, 97, 119, 50, 0, 0,
+  99, 120, 100, 101, 52, 51, 0, 0, 32, 118, 102, 116, 114, 53, 0, 0,
+  110, 98, 104, 103, 121, 54, 0, 0, 0, 109, 106, 117, 55, 56, 0, 0,
+  44, 107, 105, 111, 48, 57, 0, 0, 46, 47, 108, 59, 112, 45, 0, 0,
+  0, 39, 0, 91, 61, 0, 0, 143, 0, 10, 93, 0, 92, 0, 0, 0,
+  0, 0, 0, 0, 0, 8, 0, 0, 49, 0, 52, 55, 0, 0, 0, 48,
+  46, 50, 53, 54, 56, 27, 142, 138, 43, 51, 45, 42, 57, 144, 0, 0,
+  0, 0, 134,
+  0, 136, 0, 132, 130, 128, 129, 139, 0, 137, 135, 133, 131, 9, 126, 0, 0,
+  141, 0, 0, 140, 81, 33, 0, 0, 0, 90, 83, 65, 87, 64, 0, 0,
+  67, 88, 68, 69, 36, 35, 0, 0, 32, 86, 70, 84, 82, 37, 0, 0,
+  78, 66, 72, 71, 89, 94, 0, 0, 0, 77, 74, 85, 38, 42, 0, 0,
+  60, 75, 73, 79, 41, 40, 0, 0, 62, 63, 76, 58, 80, 95, 0, 0,
+  0, 34, 0, 123, 43, 0, 0, 143, 0, 10, 125, 0, 124, 0, 0, 0,
+  0, 0, 0, 0, 0, 8, 0, 0, 49, 0, 52, 55, 0, 0, 0, 48,
+  46, 50, 53, 54, 56, 27, 142, 138, 43, 51, 45, 42, 57, 144, 0, 0,
+  0, 0, 134];
+
+const KEYBOARD_HANDLER_STATE: &u32 = 1074666128;
+const KEYBOARD_HANDLER_SHIFT: &u32 = 1074666132;
+const KEYBOARD_HANDLER_CHAR: &u32 = 1074666136;
+
+const NVIC_INTERRUPT_SET_ENABLE_REGISTER: &u32 = 3758153984;
+const NVIC_INTERRUPT_CLEAR_ENABLE_REGISTER: &u32 = 3758154112;
+const USART_ID: u32 = 131072;
+
+fn keyboard_init() {
+  *KEYBOARD_HANDLER_STATE = 0;
+  *KEYBOARD_HANDLER_SHIFT = 0;
+  *KEYBOARD_HANDLER_CHAR = 0;
+
+  const PIOA_ENABLE_REGISTER: &u32 = 1074662912;
+  const PA10_17_PINS: u32 = 132096;
+  *PIOA_ENABLE_REGISTER = PA10_17_PINS;
+
+  const PMC_PERIPHERAL_CLOCK_ENABLE_REGISTER: &u32 = 1074660880;
+  *PMC_PERIPHERAL_CLOCK_ENABLE_REGISTER = USART_ID;
+
+  const USART_CONTROL_REGISTER: &u32 = 1074364416;
+  const USART_MODE_REGISTER: &u32 = 1074364420;
+  const USART_INTERRUPT_ENABLE_REGISTER: &u32 = 1074364424;
+
+  *USART_MODE_REGISTER = 1008; /*PS/2 protocol configuration*/
+  *USART_INTERRUPT_ENABLE_REGISTER = 1; /*Enable RX ready interrupt*/
+  *NVIC_INTERRUPT_SET_ENABLE_REGISTER = USART_ID;
+  *USART_CONTROL_REGISTER = 16; /*Enable receiver*/
+}
+
+fn keyboard_put_char(c: u32) {
+  if *KEYBOARD_HANDLER_CHAR == 0 {
+    *KEYBOARD_HANDLER_CHAR = c;
+  }
+}
+
+fn keyboard_get_char() -> u32 {
+  *NVIC_INTERRUPT_CLEAR_ENABLE_REGISTER = USART_ID;
+  let c = *KEYBOARD_HANDLER_CHAR;
+  *KEYBOARD_HANDLER_CHAR = 0;
+  *NVIC_INTERRUPT_SET_ENABLE_REGISTER = USART_ID;
+  return c;
+}
+
+fn keyboard_wait_char() -> u32 {
+  let c = 0;
+  while c == 0 { c = keyboard_get_char(); }
+  return c;
+}
+
+const SKIP_CODE: u32 = 0;
+const RELEASE_SHIFT: u32 = 1;
+const PRESS_SHIFT: u32 = 2;
+const PUT_EXTENDED_CODE: u32 = 3;
+const PUT_CODE: u32 = 4;
+
+fn keyboard_handle_code(action: u32, scancode: u32) {
+  if action == RELEASE_SHIFT {
+    *KEYBOARD_HANDLER_SHIFT = 0;
+  } else if action == PRESS_SHIFT {
+    *KEYBOARD_HANDLER_SHIFT = 132;
+  } else if action == PUT_EXTENDED_CODE {
+    keyboard_put_char(scancode + 128);
+  } else if action == PUT_CODE {
+    keyboard_put_char(load8(CHARACTERS + scancode + *KEYBOARD_HANDLER_SHIFT));
+  }
+}
+
+static TRANSITION_TABLE = [
+  4, 0, 0, 30, 0, 20, 0, 10, 2, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 1, 0,
+  3, 0, 0, 0, 0, 0, 0, 40, 0, 0,
+  0, 10, 0, 0, 0, 0, 0, 10, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+
+fn keyboard_action_column(scancode : u32) -> u32 {
+  if scancode == 18 { return 8; }
+  if scancode < 132 { return 0; }
+  if scancode == 224 { return 4; }
+  if scancode == 240 { return 6; }
+  return 2;
+}
+
+fn keyboard_handler() {
+  const USART_RECEIVER_HOLDING_REGISTER: &u32 = 1074364440;
+  let scancode = *USART_RECEIVER_HOLDING_REGISTER;
+  let cell = TRANSITION_TABLE + *KEYBOARD_HANDLER_STATE + keyboard_action_column(scancode);
+  keyboard_handle_code(load8(cell), scancode);
+  *KEYBOARD_HANDLER_STATE = load8(cell + 1);
+}

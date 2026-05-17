@@ -1,0 +1,18 @@
+static USAGE = ['U','s','a','g','e',':',' ',
+  'r','e','b','o','o','t',' ','[','-','r','o','m',']'];
+
+static ROM = ['-','r','o','m'];
+
+fn main(args: &u32, args_end: &u32, heap: &u32, heap_limit: &u32) -> u32 {
+  let length = 0;
+  let argument = sh_read_token(&args, args_end, &length);
+  let mode = 0; /*Flash*/
+  if argument != null {
+    if length != 4 || *argument != *ROM {
+      write(STANDARD_OUTPUT, USAGE, 20);
+      return INVALID_ARGUMENT;
+    }
+    mode = 1; /*ROM*/
+  }
+  return status(reboot(mode));
+}

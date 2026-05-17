@@ -1,0 +1,77 @@
+fn panic_result() -> u32 [
+  /*MOV_R11_SP*/18155;
+  /*MOV_R12_LR*/18164;
+  /*MOV_R0_0*/8192;
+  /*MOV_PC_LR*/18167;
+]
+
+fn panic(error: u32) [ /*MOV_SP_R11*/18141; /*MOV_PC_R12*/18151; ]
+
+const TC_INTEGER: u32 = 2;
+const TC_IDENTIFIER: u32 = 3;
+const TC_ADD: u32 = 4;
+const TC_SUB: u32 = 5;
+const TC_MUL: u32 = 6;
+const TC_DIV: u32 = 7;
+const TC_BIT_AND: u32 = 8;
+const TC_BIT_OR: u32 = 9;
+const TC_SHIFT_LEFT: u32 = 10;
+const TC_SHIFT_RIGHT: u32 = 11;
+const TC_LT: u32 = 12;
+const TC_GE: u32 = 17;
+const TC_AND: u32 = 18;
+const TC_OR: u32 = 19;
+const TC_ARROW: u32 = 20;
+const TC_AS: u32 = 138;
+const TC_BREAK: u32 = 128;
+const TC_CONST: u32 = 129;
+const TC_ELSE: u32 = 130;
+const TC_FN: u32 = 131;
+const TC_IF: u32 = 132;
+const TC_LET: u32 = 133;
+const TC_LOOP: u32 = 134;
+const TC_NULL: u32 = 139;
+const TC_RETURN: u32 = 135;
+const TC_SIZEOF: u32 = 140;
+const TC_STATIC: u32 = 136;
+const TC_STRUCT: u32 = 141;
+const TC_U32: u32 = 142;
+const TC_WHILE: u32 = 137;
+
+const SYM_FN: u32 = 0;
+const SYM_FORWARD_FN: u32 = 1;
+const SYM_VARIABLE: u32 = 2;
+const SYM_CONST: u32 = 3;
+const SYM_STATIC: u32 = 4;
+const SYM_STRUCT: u32 = 5;
+const SYM_FIELD: u32 = 6;
+const SYM_VOID: u32 = 7;
+
+struct Symbol {
+  name: &u32,
+  length: u32,
+  kind: u32,
+  value: u32,
+  type: &Symbol,
+  dim: u32,
+  next: &Symbol
+}
+
+struct Compiler {
+  src: &u32,
+  src_end: &u32,
+  next_char: u32,
+  next_char_type: u32,
+  next_token: u32,
+  next_token_data: u32,
+  next_token_length: u32,
+  dst: &u32,
+  dst_limit: &u32,
+  heap: &u32,
+  heap_limit: &u32,
+  symbols: &Symbol,
+  fn_dst: &u32,
+  fn_return_type: &Symbol,
+  next_register: u32,
+  frame_size: u32
+}

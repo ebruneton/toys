@@ -1,0 +1,19 @@
+static USAGE = ['U','s','a','g','e',':',' ',
+  'd','e','l','e','t','e',' ','f','i','l','e'];
+
+static CANT_DELETE = ['C','a','n',''','t',' ','d','e','l','e','t','e',' '];
+
+fn main(args: &u32, args_end: &u32, heap: &u32, heap_limit: &u32) -> u32 {
+  let length = 0;
+  let name = sh_read_token(&args, args_end, &length);
+  if name == null {
+    write(STANDARD_OUTPUT, USAGE, 18);
+    return INVALID_ARGUMENT;
+  }
+  let result = status(delete(name, length));
+  if result != OK {
+    write(STANDARD_OUTPUT, CANT_DELETE, 13);
+    write(STANDARD_OUTPUT, name, length);
+  }
+  return result;
+}

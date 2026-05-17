@@ -1,0 +1,67 @@
+static VECTOR_TABLE = [
+  0, 128, 8, 32,        /* Initial Stack Pointer */
+  17, 0, 0, 0,          /* Reset handler */
+  't', 'o', 'y', 's',
+  17, 0, 8, 0           /* Hard Fault handler */
+];
+
+struct DiskBlock {
+  next_block: &DiskBlock
+}
+
+struct FileBlock {
+  next_block: &DiskBlock,
+  next_file: &FileBlock,
+  name_length: u32,
+  name: u32
+}
+
+struct SuperBlock {
+  first_file: &FileBlock,
+  first_free_block: &DiskBlock
+}
+
+const SUPER_BLOCK: &SuperBlock = 524544;
+
+fn copy_block(src: &u32, dst: &u32, size: u32) -> &u32;
+
+fn run(code: &u32, heap: &u32, stack: &u32);
+
+fn main() {
+  const EEFC0_COMMAND_REGISTER: &u32 = 1074661892;
+  if VECTOR_TABLE != null {
+    *EEFC0_COMMAND_REGISTER = 1509949708; /*Clear Boot Mode Selection Bit*/
+    loop {}
+  }
+  const KERNEL_NAME: &u32 = 8;
+  let file = SUPER_BLOCK.first_file;
+  while file.name_length != 4 || file.name != *KERNEL_NAME {
+    file = file.next_file;
+  }
+  const KERNEL_ADDRESS: &u32 = 537329920;
+  let dst = KERNEL_ADDRESS;
+  let block = file as &DiskBlock;
+  let offset = sizeof(FileBlock);
+  while block as u32 > 256 {
+    dst = copy_block(block as &u32 + offset, dst, 256 - offset);
+    block = block.next_block;
+    offset = 4;
+  }
+  const STACK_POINTER: &u32 = 537427968;
+  run(KERNEL_ADDRESS + 1, dst, STACK_POINTER);
+}
+
+fn copy_block(src: &u32, dst: &u32, size: u32) -> &u32 {
+  let end = src + size;
+  while src < end {
+    *dst = *src;
+    src = src + 4;
+    dst = dst + 4;
+  }
+  return dst;
+}
+
+fn run(code: &u32, heap: &u32, stack: &u32) [
+  /*MOV_SP_R2*/18069;
+  /*BX_R0*/18176;
+]

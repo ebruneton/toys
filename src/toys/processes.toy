@@ -1,0 +1,196 @@
+struct Context {
+  r0: u32,
+  r1: u32,
+  r2: u32,
+  r3: u32,
+  r12: u32,
+  r14: u32,
+  return_address: u32,
+  status_register: u32
+}
+
+const MODE_UNUSED: u32 = 0;
+const MODE_LIST: u32 = 'l';
+const MODE_READ: u32 = 'r';
+const MODE_WRITE: u32 = 'w';
+
+struct FileStream {
+  next: &FileStream,
+  mode: u32,
+  file_block: &FileBlock,
+  current_block: &DiskBlock,
+  current_offset: u32
+}
+
+struct Process {
+  parent: &Process,
+  begin: &u32,
+  end: &u32,
+  saved_context: &Context,
+  file_streams: &FileStream,
+  output_p: &&u32,
+  output_limit: &u32
+}
+
+struct Kernel {
+  heap: &u32,
+  heap_limit: &u32,
+  stack_limit: &u32,
+  current_process: &Process,
+  spawn: u32,
+  exit: u32,
+  sleep: u32,
+  stat: u32,
+  open: u32,
+  read: u32,
+  write: u32,
+  close: u32,
+  delete: u32,
+  reboot: u32
+}
+
+const KERNEL_POINTER_REGISTER: &&Kernel = 1074666140;
+
+fn os_kernel() -> &Kernel { return *KERNEL_POINTER_REGISTER; }
+
+fn min(x: u32, y: u32) -> u32 {
+  if x < y { return x; } else { return y; }
+}
+
+fn max(x: u32, y: u32) -> u32 {
+  if x > y { return x; } else { return y; }
+}
+
+fn set_control_register(value: u32) [
+  /*MSR_CONTROL_R0*/ 2283074432;
+  /*MOV_PC_LR*/ 18167;
+]
+
+fn get_process_stack_pointer() -> &u32 [
+  /*MRS_R0_PSP*/ 2148135919;
+  /*MOV_PC_LR*/ 18167;
+]
+
+fn set_process_stack_pointer(value: &u32) [
+  /*MSR_PSP_R0*/ 2282353536;
+  /*MOV_PC_LR*/ 18167;
+]
+
+fn mpu_set_region(id: u32, begin: u32, end: u32, level: u32) {
+  const MPU_REGION_BASE_ADDRESS_REGISTER: &u32 = 3758157212;
+  const MPU_REGION_ATTRIBUTE_AND_SIZE_REGISTER: &u32 = 3758157216;
+  const RAM_FULL_ACCESS_ENABLED: u32 = 50724865;
+  let base_address = (begin >> level) << level;
+  begin = (begin - base_address) >> (level - 3);
+  end = (end - base_address) >> (level - 3);
+  *MPU_REGION_BASE_ADDRESS_REGISTER = base_address | 16 | id;
+  *MPU_REGION_ATTRIBUTE_AND_SIZE_REGISTER = RAM_FULL_ACCESS_ENABLED |
+      (255 - (1 << end) + (1 << begin)) << 8 | (level - 1) << 1;
+}
+
+fn mpu_set_end_regions(id: u32, begin: &u32, end: &u32, level: u32) {
+  let gap_begin = min(((*begin >> level) + 1) << level, *end);
+  let gap_end = max(*begin, ((*end - 1) >> level) << level);
+  mpu_set_region(id, *begin, gap_begin, level);
+  mpu_set_region(id + 1, gap_end, *end, level);
+  *begin = min(gap_begin, gap_end);
+  *end = gap_end;
+}
+
+fn mpu_set_regions(begin: u32, end: u32) {
+  mpu_set_end_regions(0, &begin, &end, 8);
+  mpu_set_end_regions(2, &begin, &end, 11);
+  mpu_set_end_regions(4, &begin, &end, 14);
+  mpu_set_end_regions(6, &begin, &end, 17);
+}
+
+fn os_set_current_process(kernel: &Kernel, process: &Process) {
+  set_process_stack_pointer(process.saved_context as &u32);
+  mpu_set_regions(process.begin as u32, process.end as u32);
+  kernel.current_process = process;
+}
+
+const FALSE: u32 = 0;
+const TRUE: u32 = 1;
+
+fn process_contains_buffer(self: &Process, ptr: &u32, size: u32) -> u32 {
+  if ptr < self.begin || ptr >= self.end { return FALSE; }
+  if size > self.end - ptr { return FALSE; }
+  return TRUE;
+}
+
+fn os_spawn(dst: &u32, name: &u32, name_length: u32,
+    args: &u32, args_length: u32, output_p: &&u32) -> u32 {
+  let kernel = os_kernel();
+  if sizeof(Process) > kernel.heap_limit - kernel.heap {
+    return error_result(OUT_OF_MEMORY);
+  }
+  let begin = (((dst as u32 + 31) >> 5) << 5) as &u32;
+  let end = (((kernel.stack_limit as u32) >> 5) << 5) as &u32;
+  let parent = kernel.current_process;
+  if parent != null {
+    end = ((get_process_stack_pointer() as u32 >> 5) << 5) as &u32;
+    if end < begin || begin < parent.begin ||
+        process_contains_buffer(parent, name, name_length) == FALSE ||
+        process_contains_buffer(parent, args, args_length) == FALSE {
+      return error_result(INVALID_ARGUMENT);
+    }
+    if args + args_length > begin && args < end {
+      return error_result(INVALID_ARGUMENT);
+    }
+    if process_contains_buffer(parent, output_p as &u32, 4) == FALSE ||
+        *output_p < parent.begin || *output_p > dst {
+      return error_result(INVALID_ARGUMENT);
+    }
+  }
+  let file_block = disk_find_file(name, name_length, null);
+  if file_block == null { return error_result(NOT_FOUND); }
+  let code_size = disk_get_file_size(file_block);
+  if code_size > end - begin {
+    return error_result(OUT_OF_MEMORY);
+  }
+  const MIN_STACK_SIZE: u32 = 512;
+  let heap = begin + code_size;
+  let heap_limit = end - MIN_STACK_SIZE;
+  if heap_limit < heap + 4 || args_length > heap_limit - heap - 4 {
+    return error_result(OUT_OF_MEMORY);
+  }
+  let offset = 12 + name_length;
+  disk_read_file(&file_block as &&DiskBlock, &offset, begin, code_size);
+  *heap = args_length;
+  mem_copy_non_overlapping(args, heap + 4, args_length);
+  let context = (end - sizeof(Context)) as &Context;
+  context.r0 = heap as u32;
+  context.r1 = heap_limit as u32;
+  context.r14 = 0;
+  context.return_address = begin as u32;
+  context.status_register = 1 << 24;
+  if parent != null {
+    parent.saved_context = get_process_stack_pointer() as &Context;
+  } else {
+    set_control_register(/*unprivileged*/1);
+  }
+  let process = kernel.heap as &Process;
+  kernel.heap = kernel.heap + sizeof(Process);
+  process.parent = parent;
+  process.begin = begin;
+  process.end = end;
+  process.saved_context = context;
+  process.file_streams = null;
+  process.output_p = output_p;
+  process.output_limit = dst;
+  os_set_current_process(kernel, process);
+  return OK;
+}
+
+fn os_exit(result: u32) -> u32 {
+  let kernel = os_kernel();
+  let process = kernel.current_process;
+  if process.parent == null { return error_result(INVALID_STATE); }
+  if result >= (1 << 24) { return error_result(INVALID_ARGUMENT); }
+  kernel.heap = process as &u32;
+  process = process.parent;
+  process.saved_context.r0 = result;
+  os_set_current_process(kernel, process);
+  return OK;
+}

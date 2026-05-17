@@ -1,0 +1,103 @@
+fn hard_fault_handler() {
+  os_exit(INTERNAL_ERROR);
+}
+
+fn call(arg0: u32, arg1: u32, arg2: u32, arg3: u32, arg4: u32, arg5: u32,
+    function: u32) -> u32 [
+  /*BX_R6*/ 18224;
+]
+
+const NUM_SYSTEM_CALLS: u32 = 10;
+
+static SYSTEM_CALL_ARITY = [6, 1, 1, 2, 3, 3, 3, 1, 2, 1];
+
+struct CallArguments {
+  arg0: u32,
+  arg1: u32,
+  arg2: u32,
+  arg3: u32,
+  arg4: u32,
+  arg5: u32
+}
+
+fn supervisor_call_handler() {
+  let kernel = os_kernel();
+  let exc_return_ptr = &kernel as &u32 + 4;
+  let context = (exc_return_ptr + 4) as &Context;
+  let process = kernel.current_process;
+  if process != null {
+    context = get_process_stack_pointer() as &Context;
+  }
+  let id = context.r0;
+  let function_p = &kernel.spawn + (id << 2);
+  let args = context.r1 as &CallArguments;
+  let args_size = 0;
+  let result = error_result(INVALID_ARGUMENT);
+  if id < NUM_SYSTEM_CALLS {
+    args_size = load8(SYSTEM_CALL_ARITY + id) << 2;
+    if process == null ||
+        process_contains_buffer(process, args as &u32, args_size) == TRUE {
+      result = call(args.arg0, args.arg1, args.arg2, args.arg3,
+          args.arg4, args.arg5, *function_p + 1);
+    }
+  }
+  context.r0 = result;
+  *exc_return_ptr = 4294967293; /*Thread Mode, Process Stack*/
+}
+
+fn usart_handler() {
+  keyboard_handler();
+}
+
+fn os_init(code: &u32, heap: &u32, stack: &u32) {
+  const VECTOR_TABLE_OFFSET_REGISTER: &&u32 = 3758157064;
+  const HARD_FAULT_HANDLER_OFFSET: u32 = 12;
+  const SVC_HANDLER_OFFSET: u32 = 44;
+  const USART_HANDLER_OFFSET: u32 = 132;
+  let vector_table = code - 257;
+  *(vector_table + HARD_FAULT_HANDLER_OFFSET) = hard_fault_handler + 1;
+  *(vector_table + SVC_HANDLER_OFFSET) = supervisor_call_handler + 1;
+  *(vector_table + USART_HANDLER_OFFSET) = usart_handler + 1;
+  *VECTOR_TABLE_OFFSET_REGISTER = vector_table;
+
+  const MAX_KERNEL_HEAP_SIZE: u32 = 512;
+  const MAX_KERNEL_STACK_SIZE: u32 = 512;
+  let kernel = heap as &Kernel;
+  kernel.heap = heap + sizeof(Kernel);
+  kernel.heap_limit = heap + MAX_KERNEL_HEAP_SIZE;
+  kernel.stack_limit = stack - MAX_KERNEL_STACK_SIZE;
+  kernel.current_process = null;
+  kernel.spawn = os_spawn;
+  kernel.exit = os_exit;
+  kernel.sleep = os_sleep;
+  kernel.stat = os_stat;
+  kernel.open = os_open;
+  kernel.read = os_read;
+  kernel.write = os_write;
+  kernel.close = os_close;
+  kernel.delete = os_delete;
+  kernel.reboot = os_reboot;
+  *(KERNEL_POINTER_REGISTER as &&Kernel) = kernel;
+
+  clock_init();
+  keyboard_init();
+  gpu_init();
+  const SVC_HANDLER_PRIORITY_REGISTER: &u32 = 3758157084;
+  const MPU_CONTROL_REGISTER: &u32 = 3758157204;
+  *SVC_HANDLER_PRIORITY_REGISTER = 255 << 24;
+  *MPU_CONTROL_REGISTER = 5; /*Enable MPU and background region*/
+}
+
+fn system_call(id: u32, args: &u32) [ /*SVC*/ 57088; ]
+
+fn spawn(dst: &u32, name: &u32, name_length: u32,
+    args: &u32, args_length: u32, output_p: &&u32) {
+  system_call(0, &dst as &u32);
+}
+
+static SHELL = ['s','h','e','l','l'];
+
+fn os_spawn_shell() {
+  let dst = os_kernel().heap_limit;
+  spawn(dst, SHELL, 5, null, 0, &dst);
+}

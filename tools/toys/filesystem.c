@@ -1,105 +1,113 @@
-struct DiskBlock {
-  next_block: u64,
-  next_file: u64,
-  name_length: u64,
-  name: u64
-}
+/**
+ * Copyright (c) 2026 Eric Bruneton
+ * All rights reserved.
+ *
+ * This file is part of Toys (https://github.com/ebruneton/toys).
+ *
+ * Toys is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version.
+ *
+ * Toys is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License for more
+ * details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * Toys. If not, see <https://www.gnu.org/licenses/>
+ */
 
-struct Disk {
-  id: u64,
-  io: &BlockIoProtocol,
-  block_buffer: &DiskBlock
-}
+#include <assert.h>
+#include <stdbool.h>
+#include <string.h>
 
-fn block_get_next(self: &DiskBlock) -> u64 {
-  if self.next_block <= 512 { return 0; }
-  return self.next_block - 512;
-}
+#include "filesystem.h"
 
-fn block_set_next(self: &DiskBlock, next_block: u64) {
-  self.next_block = next_block + 512;
-}
+static_assert(sizeof(DiskBlock) == 512);
 
-fn block_size(self: &DiskBlock) -> &u64 {
-  return &self.next_block;
-}
-
-fn disk_new(heap_p: &&u64, heap_limit: &u64, io: &BlockIoProtocol) -> &Disk {
-  let disk = mem_allocate(sizeof(Disk), heap_p, heap_limit) as &Disk;
-  let block_buffer = mem_allocate(512, heap_p, heap_limit) as &DiskBlock;
-  if disk != null && block_buffer != null {
-    disk.id = (*io.media << 32) >> 32;
-    disk.io = io;
-    disk.block_buffer = block_buffer;
+u64_t from_u64(u64 x) {
+  u64_t result;
+  for (int i = 0; i < 8; ++i) {
+    result.bytes[i] = (u8) (x >> (8 * i));
   }
-  return disk;
+  return result;
 }
 
-const SUPER_BLOCK: u64 = 0;
-const FIRST_LOGICAL_BLOCK_ADDRESS: u64 = 16;
+u64 to_u64(u64_t x) {
+  u64 result = 0;
+  for (int i = 0; i < 8; ++i) {
+    result |= ((u64) x.bytes[i]) << (8 * i);
+  }
+  return result;
+}
 
-const EQUAL: u64 = 0;
-const SMALLER: u64 = 1;
-const GREATER: u64 = 2;
+u64 block_get_next(DiskBlock* self) {
+  if (to_u64(self->next_block) <= 512) { return 0; }
+  return to_u64(self->next_block) - 512;
+}
 
-fn disk_compare_file_name(file: &DiskBlock, name: &u64, length: u64) -> u64 {
-  let file_name_length = file.name_length;
-  let file_name = &file.name;
-  let i = 0;
-  while i < file_name_length && i < length {
-    if load8(file_name + i) < load8(name + i) { return SMALLER; }
-    if load8(file_name + i) > load8(name + i) { return GREATER; }
+void block_set_next(DiskBlock* self, u64 next_block) {
+  self->next_block = from_u64(next_block + 512);
+}
+
+u64_t* block_size(DiskBlock* self) {
+  return &self->next_block;
+}
+
+const u64 EQUAL = 0;
+const u64 SMALLER = 1;
+const u64 GREATER = 2;
+
+u64 disk_compare_file_name(DiskBlock* file, u8* name, u64 length) {
+  u64 file_name_length = to_u64(file->name_length);
+  u8* file_name = file->name;
+  u64 i = 0;
+  while (i < file_name_length && i < length) {
+    if (load8(file_name + i) < load8(name + i)) { return SMALLER; }
+    if (load8(file_name + i) > load8(name + i)) { return GREATER; }
     i = i + 1;
   }
-  if file_name_length < length { return SMALLER; }
-  if file_name_length > length { return GREATER; }
+  if (file_name_length < length) { return SMALLER; }
+  if (file_name_length > length) { return GREATER; }
   return EQUAL;
 }
 
-fn disk_read_block_buffer(self: &Disk, block: u64) -> &DiskBlock {
-  let io = self.io;
-  let buffer = self.block_buffer;
-  let lba = block + FIRST_LOGICAL_BLOCK_ADDRESS;
-  if efi_call5(io.read_blocks, io as u64, self.id, lba, 512, buffer as u64) != 0 {
-    buffer.next_block = 0;
-    buffer.next_file = 0;
-    buffer.name_length = 0;
-  }
-  return buffer;
+DiskBlock* disk_read_block_buffer(Disk* self, u64 block_id) {
+  memcpy((u8*) self->block_buffer, self->image + block_id * 512, 512);
+  return self->block_buffer;
 }
 
-fn disk_write_block_buffer(self: &Disk, block: u64) {
-  let io = self.io;
-  let lba = block + FIRST_LOGICAL_BLOCK_ADDRESS;
-  efi_call5(io.write_blocks, io as u64, self.id, lba, 512, self.block_buffer as u64);
+void disk_write_block_buffer(Disk* self, u64 block_id) {
+  memcpy(self->image + block_id * 512, (u8*) self->block_buffer, 512);
 }
 
-fn disk_flush_blocks(self: &Disk) {
-  efi_call1(self.io.flush_blocks, self.io as u64);
+void disk_flush_blocks(Disk* self) {
+  (void) self;
 }
 
-fn disk_find_file(self: &Disk, name: &u64, length: u64, previous_file: &u64) -> u64 {
-  let block_buffer = disk_read_block_buffer(self, SUPER_BLOCK);
-  let file = block_buffer.next_file;
-  let file_name = SMALLER;
-  while file != 0 {
+u64 disk_find_file(Disk* self, u8* name, u64 length, u64* previous_file) {
+  DiskBlock* block_buffer = disk_read_block_buffer(self, SUPER_BLOCK);
+  u64 file = to_u64(block_buffer->next_file);
+  u64 file_name = SMALLER;
+  while (file != 0) {
     disk_read_block_buffer(self, file);
     file_name = disk_compare_file_name(block_buffer, name, length);
-    if file_name == EQUAL { return file; }
-    if file_name == GREATER { return 0; }
-    if previous_file != null { *previous_file = file; }
-    file = block_buffer.next_file;
+    if (file_name == EQUAL) { return file; }
+    if (file_name == GREATER) { return 0; }
+    if (previous_file != null) { *previous_file = file; }
+    file = to_u64(block_buffer->next_file);
   }
   return 0;
 }
 
-fn disk_get_file_size(self: &Disk, file: u64) -> u64 {
-  let file_size = 0;
-  let block_buffer = disk_read_block_buffer(self, file);
-  let header_size = 24 + block_buffer.name_length;
-  loop {
-    if block_get_next(block_buffer) == 0 {
-      return file_size + *block_size(block_buffer) - header_size;
+u64 disk_get_file_size(Disk* self, u64 file) {
+  u64 file_size = 0;
+  DiskBlock* block_buffer = disk_read_block_buffer(self, file);
+  u64 header_size = 24 + to_u64(block_buffer->name_length);
+  while (true) {
+    if (block_get_next(block_buffer) == 0) {
+      return file_size + to_u64(*block_size(block_buffer)) - header_size;
     }
     file_size = file_size + 512 - header_size;
     disk_read_block_buffer(self, block_get_next(block_buffer));
@@ -107,31 +115,27 @@ fn disk_get_file_size(self: &Disk, file: u64) -> u64 {
   }
 }
 
-fn mem_copy_non_overlapping(src: &u64, dst: &u64, size: u64) {
-  let i = 0;
-  while i < size {
-    store8(dst + i, load8(src + i));
-    i = i + 1;
-  }
+void mem_copy_non_overlapping(u8* src, u8* dst, u64 size) {
+  memcpy(dst, src, size);
 }
 
-fn disk_read_file(self: &Disk, block: &u64, offset: &u64, dst: &u64, size: u64) -> u64 {
-  let block_buffer = self.block_buffer;
-  let available = 0;
-  loop {
+u64 disk_read_file(Disk *self, u64* block, u64* offset, u8* dst, u64 size) {
+  DiskBlock* block_buffer = self->block_buffer;
+  u64 available = 0;
+  while (true) {
     disk_read_block_buffer(self, *block);
-    if block_get_next(block_buffer) == 0 {
-      available = *block_size(block_buffer) - *offset;
+    if (block_get_next(block_buffer) == 0) {
+      available = to_u64(*block_size(block_buffer)) - *offset;
     } else {
       available = 512 - *offset;
     }
-    if available >= size {
-      mem_copy_non_overlapping(block_buffer as &u64 + *offset, dst, size);
+    if (available >= size) {
+      mem_copy_non_overlapping((u8*) block_buffer + *offset, dst, size);
       *offset = *offset + size;
       return 0;
     }
-    mem_copy_non_overlapping(block_buffer as &u64 + *offset, dst, available);
-    if block_get_next(block_buffer) == 0 {
+    mem_copy_non_overlapping((u8*) block_buffer + *offset, dst, available);
+    if (block_get_next(block_buffer) == 0) {
       return size - available;
     }
     *block = block_get_next(block_buffer);
@@ -141,56 +145,46 @@ fn disk_read_file(self: &Disk, block: &u64, offset: &u64, dst: &u64, size: u64) 
   }
 }
 
-const OK: u64 = 0;
-const INVALID_ARGUMENT: u64 = 1;
-const INVALID_STATE: u64 = 2;
-const NOT_FOUND: u64 = 3;
-const ALREADY_EXISTS: u64 = 4;
-const OUT_OF_MEMORY: u64 = 5;
-const INTERNAL_ERROR: u64 = 6;
-
-fn error_result(error: u64) -> u64 { return error << 56; }
-
-fn disk_create_file(self: &Disk, name: &u64, length: u64, result: &u64) -> u64 {
-  if length == 0 || length > 488 { return INVALID_ARGUMENT; }
-  let i = 0;
-  while i < length {
-    if load8(name + i) <= 32 || load8(name + i) >= 127 {
+u64 disk_create_file(Disk* self, u8* name, u64 length, u64* result) {
+  if (length == 0 || length > 488) { return INVALID_ARGUMENT; }
+  u64 i = 0;
+  while (i < length) {
+    if (load8(name + i) <= 32 || load8(name + i) >= 127) {
       return INVALID_ARGUMENT;
     }
     i = i + 1;
   }
-  let previous_file = 0;
-  let block_buffer = disk_read_block_buffer(self, SUPER_BLOCK);
-  let new_file = block_get_next(block_buffer);
-  if new_file == 0 { return OUT_OF_MEMORY; }
-  let new_first_file = block_buffer.next_file;
-  let file = block_buffer.next_file;
-  let file_name = SMALLER;
-  while file != 0 {
+  u64 previous_file = 0;
+  DiskBlock* block_buffer = disk_read_block_buffer(self, SUPER_BLOCK);
+  u64 new_file = block_get_next(block_buffer);
+  if (new_file == 0) { return OUT_OF_MEMORY; }
+  u64 new_first_file = to_u64(block_buffer->next_file);
+  u64 file = to_u64(block_buffer->next_file);
+  u64 file_name = SMALLER;
+  while (file != 0) {
     disk_read_block_buffer(self, file);
     file_name = disk_compare_file_name(block_buffer, name, length);
-    if file_name == EQUAL { return ALREADY_EXISTS; }
-    if file_name == GREATER { break; }
+    if (file_name == EQUAL) { return ALREADY_EXISTS; }
+    if (file_name == GREATER) { break; }
     previous_file = file;
-    file = block_buffer.next_file;
+    file = to_u64(block_buffer->next_file);
   }
-  if previous_file != 0 {
+  if (previous_file != 0) {
     disk_read_block_buffer(self, previous_file);
-    block_buffer.next_file = new_file;
+    block_buffer->next_file = from_u64(new_file);
     disk_write_block_buffer(self, previous_file);
   } else {
     new_first_file = new_file;
   }
   disk_read_block_buffer(self, new_file);
-  let new_first_free_block = block_get_next(block_buffer);
-  *block_size(block_buffer) = 24 + length;
-  block_buffer.next_file = file;
-  block_buffer.name_length = length;
-  mem_copy_non_overlapping(name, &block_buffer.name, length);
+  u64 new_first_free_block = block_get_next(block_buffer);
+  *block_size(block_buffer) = from_u64(24 + length);
+  block_buffer->next_file = from_u64(file);
+  block_buffer->name_length = from_u64(length);
+  mem_copy_non_overlapping(name, block_buffer->name, length);
   disk_write_block_buffer(self, new_file);
   disk_read_block_buffer(self, SUPER_BLOCK);
-  block_buffer.next_file = new_first_file;
+  block_buffer->next_file = from_u64(new_first_file);
   block_set_next(block_buffer, new_first_free_block);
   disk_write_block_buffer(self, SUPER_BLOCK);
   disk_flush_blocks(self);
@@ -198,27 +192,27 @@ fn disk_create_file(self: &Disk, name: &u64, length: u64, result: &u64) -> u64 {
   return OK;
 }
 
-fn disk_write_file(self: &Disk, block: &u64, src: &u64, size: u64) -> u64 {
-  let block_buffer = disk_read_block_buffer(self, SUPER_BLOCK);
-  let old_first_free_block = block_get_next(block_buffer);
-  let new_first_free_block = old_first_free_block;
+u64 disk_write_file(Disk* self, u64* block, u8* src, u64 size) {
+  DiskBlock* block_buffer = disk_read_block_buffer(self, SUPER_BLOCK);
+  u64 old_first_free_block = block_get_next(block_buffer);
+  u64 new_first_free_block = old_first_free_block;
   disk_read_block_buffer(self, *block);
-  let used = *block_size(block_buffer);
-  let free = 512 - used;
-  let result = OK;
-  loop {
-    if size <= free {
-      *block_size(block_buffer) = used + size;
-      mem_copy_non_overlapping(src, block_buffer as &u64 + used, size);
+  u64 used = to_u64(*block_size(block_buffer));
+  u64 free = 512 - used;
+  u64 result = OK;
+  while (true) {
+    if (size <= free) {
+      *block_size(block_buffer) = from_u64(used + size);
+      mem_copy_non_overlapping(src, (u8*) block_buffer + used, size);
       disk_write_block_buffer(self, *block);
       break;
     }
-    if new_first_free_block == 0 {
+    if (new_first_free_block == 0) {
       result = OUT_OF_MEMORY;
       break;
     }
     block_set_next(block_buffer, new_first_free_block);
-    mem_copy_non_overlapping(src, block_buffer as &u64 + used, free);
+    mem_copy_non_overlapping(src, (u8*) block_buffer + used, free);
     disk_write_block_buffer(self, *block);
     *block = new_first_free_block;
     disk_read_block_buffer(self, *block);
@@ -228,7 +222,7 @@ fn disk_write_file(self: &Disk, block: &u64, src: &u64, size: u64) -> u64 {
     used = 8;
     free = 504;
   }
-  if new_first_free_block != old_first_free_block {
+  if (new_first_free_block != old_first_free_block) {
     disk_read_block_buffer(self, SUPER_BLOCK);
     block_set_next(block_buffer, new_first_free_block);
     disk_write_block_buffer(self, SUPER_BLOCK);
@@ -237,12 +231,12 @@ fn disk_write_file(self: &Disk, block: &u64, src: &u64, size: u64) -> u64 {
   return result;
 }
 
-fn disk_delete_file_blocks(self: &Disk, block: u64) {
-  let block_buffer = disk_read_block_buffer(self, SUPER_BLOCK);
-  let first_free_block = block_get_next(block_buffer);
-  let last_block = block;
+void disk_delete_file_blocks(Disk* self, u64 block) {
+  DiskBlock* block_buffer = disk_read_block_buffer(self, SUPER_BLOCK);
+  u64 first_free_block = block_get_next(block_buffer);
+  u64 last_block = block;
   disk_read_block_buffer(self, last_block);
-  while block_get_next(block_buffer) != 0 {
+  while (block_get_next(block_buffer) != 0) {
     last_block = block_get_next(block_buffer);
     disk_read_block_buffer(self, last_block);
   }
@@ -250,37 +244,37 @@ fn disk_delete_file_blocks(self: &Disk, block: u64) {
   disk_write_block_buffer(self, last_block);
 }
 
-fn disk_clear_file(self: &Disk, file: u64) {
-  let block_buffer = disk_read_block_buffer(self, file);
-  let new_first_free_block = block_get_next(block_buffer);
-  if new_first_free_block != 0 {
+void disk_clear_file(Disk* self, u64 file) {
+  DiskBlock* block_buffer = disk_read_block_buffer(self, file);
+  u64 new_first_free_block = block_get_next(block_buffer);
+  if (new_first_free_block != 0) {
     disk_delete_file_blocks(self, new_first_free_block);
     disk_read_block_buffer(self, SUPER_BLOCK);
     block_set_next(block_buffer, new_first_free_block);
     disk_write_block_buffer(self, SUPER_BLOCK);
   }
   disk_read_block_buffer(self, file);
-  *block_size(block_buffer) = 24 + block_buffer.name_length;
+  *block_size(block_buffer) = from_u64(24 + to_u64(block_buffer->name_length));
   disk_write_block_buffer(self, file);
   disk_flush_blocks(self);
 }
 
-fn disk_delete_file(self: &Disk, file: u64, previous_file: u64) {
-  let block_buffer = disk_read_block_buffer(self, file);
-  let next_file = block_buffer.next_file;
+void disk_delete_file(Disk* self, u64 file, u64 previous_file) {
+  DiskBlock* block_buffer = disk_read_block_buffer(self, file);
+  u64 next_file = to_u64(block_buffer->next_file);
   disk_read_block_buffer(self, SUPER_BLOCK);
-  let new_first_file = block_buffer.next_file;
+  u64 new_first_file = to_u64(block_buffer->next_file);
   disk_delete_file_blocks(self, file);
-  if previous_file != 0 {
+  if (previous_file != 0) {
     disk_read_block_buffer(self, previous_file);
-    block_buffer.next_file = next_file;
+    block_buffer->next_file = from_u64(next_file);
     disk_write_block_buffer(self, previous_file);
   } else {
     new_first_file = next_file;
   }
   disk_read_block_buffer(self, SUPER_BLOCK);
   block_set_next(block_buffer, file);
-  block_buffer.next_file = new_first_file;
+  block_buffer->next_file = from_u64(new_first_file);
   disk_write_block_buffer(self, SUPER_BLOCK);
   disk_flush_blocks(self);
 }

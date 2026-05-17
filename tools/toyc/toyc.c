@@ -1,0 +1,92 @@
+fn write_integer(x: u64) {
+  let quotient = x / 10;
+  x = x - 10 * quotient + '0';
+  if quotient > 0 { write_integer(quotient); }
+  write(STANDARD_OUTPUT, &x, 1);
+}
+
+fn write_error(src1: &u64, length1: u64, src2: &u64, length2: u64, error: u64) -> u64 {
+  write(STANDARD_OUTPUT, src1, length1);
+  write(STANDARD_OUTPUT, src2, length2);
+  return error;
+}
+
+static USAGE = ['U','s','a','g','e',':',' ',
+  't','o','y','c',' ','o','u','t','p','u','t',' ',
+  'i','n','p','u','t','1',' ','i','n','p','u','t','2',' ',
+  '.','.','.'];
+
+static CANT_OPEN = ['C','a','n',''','t',' ','o','p','e','n',' '];
+static CANT_READ = ['C','a','n',''','t',' ','r','e','a','d',' '];
+static CANT_WRITE = ['C','a','n',''','t',' ','w','r','i','t','e',' '];
+static ERROR = ['E','r','r','o','r',' '];
+static AT = [' ','a','t',  ' '];
+static IN = [' ','i','n',  ' '];
+
+fn main(args: &u64, args_end: &u64, heap: &u64, heap_limit: &u64) -> u64 {
+  let out_length = 0;
+  let in_length = 0;
+  let out = sh_read_token(&args, args_end, &out_length);
+  let in = sh_read_token(&args, args_end, &in_length);
+  if out == null || in == null {
+    write(STANDARD_OUTPUT, USAGE, 36);
+    return INVALID_ARGUMENT;
+  }
+  const MAX_CODE_SIZE: u64 = 20480;
+  const MAX_HEAP_SIZE: u64 = 49152;
+  const MIN_SRC_SIZE: u64 = 256;
+  heap_limit = heap_limit - 1024;
+  if heap_limit < heap + MAX_CODE_SIZE + sizeof(Compiler) + MAX_HEAP_SIZE + MIN_SRC_SIZE {
+    return OUT_OF_MEMORY;
+  }
+  let error = 0;
+  let dst = heap;
+  let compiler = (dst + MAX_CODE_SIZE) as &Compiler;
+  compiler.dst = dst;
+  compiler.dst_limit = compiler as &u64;
+  compiler.heap = compiler.dst_limit + sizeof(Compiler);
+  compiler.heap_limit = compiler.heap + MAX_HEAP_SIZE;
+  compiler.symbols = null;
+  let src = compiler.heap_limit;
+  error = panic_result();
+  if error != 0 {
+    write(STANDARD_OUTPUT, ERROR, 6);
+    write_integer(error);
+    if in == null { return error; }
+    write(STANDARD_OUTPUT, AT, 4);
+    write_integer(compiler.src - src);
+    return write_error(IN, 4, in, in_length, error);
+  }
+  let stream = 0;
+  let src_size = 0;
+  let last_copied_symbol = compiler.symbols;
+  while in != null {
+    stream = open(in, in_length, 'r');
+    if status(stream) != OK {
+      return write_error(CANT_OPEN, 11, in, in_length, status(stream));
+    }
+    src_size = read(stream, src, heap_limit - src);
+    close(stream);
+    if status(src_size) != OK || src_size == heap_limit - src {
+      return write_error(CANT_READ, 11, in, in_length, status(src_size));
+    }
+    compiler.src = src - 1;
+    compiler.src_end = src + src_size;
+    tc_read_char(compiler);
+    tc_read_token(compiler);
+    tc_parse_program(compiler);
+    in = sh_read_token(&args, args_end, &in_length);
+    tc_copy_symbol_names(compiler, compiler.symbols, last_copied_symbol);
+    last_copied_symbol = compiler.symbols;
+  }
+  tc_check_symbols(compiler.symbols, null);
+  stream = open(out, out_length, 'w');
+  if status(stream) != OK {
+    return write_error(CANT_OPEN, 11, out, out_length, status(stream));
+  }
+  let n = write(stream, dst, compiler.dst - dst);
+  if status(n) != OK {
+    return write_error(CANT_WRITE, 12, out, out_length, status(n));
+  }
+  return OK;
+}

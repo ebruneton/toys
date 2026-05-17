@@ -2,8 +2,8 @@
 
 ![Toys](doc/figures/toys.png)
 
-A **monotasking**, **self-hosted** operating system in less than **3300 lines**
-of code. Includes:
+A toy, **monotasking**, **self-hosted** operating system in less than
+**3300 lines** of code. Includes:
 
 - a **boot loader** (~100 lines),
 - a monolithic **kernel** (~1030 lines),

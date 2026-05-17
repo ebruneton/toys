@@ -1,0 +1,43 @@
+<!--
+This work is licensed under the Creative Commons Attribution NonCommercial
+ShareAlike 4.0 International License. To view a copy of the license, visit
+https://creativecommons.org/licenses/by-nc-sa/4.0/
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="118mm" height="37mm" viewBox="0 0 118 37" version="1.1">
+  <defs/>
+  <g font-family="'Fira Sans'" font-size="3.9px" stroke-width="0.2">
+    <rect width="16" height="4" x="49" y="28" fill="#0e6e8e"/>
+    <rect width="16" height="12" x="49" y="16" fill="#cccccc"/>
+    <rect width="16" height="8" x="49" y="8" fill="#ebebeb"/>
+    <path d="M 49,28 H 65" stroke="#000000"/>
+    <path d="M 49,24 H 65" stroke="#000000"/>
+    <path d="M 49,20 H 65" stroke="#000000"/>
+    <path d="M 49,16 H 65" stroke="#000000"/>
+    <path d="M 49,12 H 65" stroke="#000000"/>
+    <path d="M 49,8 H 65" stroke="#000000"/>
+    <text x="57" y="31" font-size="3.5px" text-anchor="middle" fill="#ffffff">rip</text>
+    <text x="57" y="27" font-size="3.5px" text-anchor="middle">arg2</text>
+    <text x="57" y="23" font-size="3.5px" text-anchor="middle">arg1</text>
+    <text x="57" y="19" font-size="3.5px" text-anchor="middle">arg0</text>
+    <text x="57" y="15" font-size="3.5px" text-anchor="middle">x0</text>
+    <text x="57" y="11" font-size="3.5px" text-anchor="middle">x1</text>
+    <text x="57" y="35" font-size="3.5px" text-anchor="middle">...</text>
+    <path d="M 65,36 V 1" stroke="#000000"/>
+    <path d="M 49,36 V 1" stroke="#000000"/>
+    <path d="M 49,32 H 65" stroke="#000000"/>
+    <text x="72" y="11" font-size="3.5px">rsp</text>
+    <text x="72" y="15" font-size="3.5px" fill="#cccccc">rsp+8</text>
+    <text x="72" y="19" font-size="3.5px" fill="#cccccc">rsp+16</text>
+    <text x="72" y="23" font-size="3.5px" fill="#cccccc">rsp+24</text>
+    <text x="72" y="27" font-size="3.5px" fill="#cccccc">rsp+32</text>
+    <text x="72" y="31" font-size="3.5px" fill="#cccccc">rsp+40</text>
+    <text x="43" y="23" font-size="3.5px" text-anchor="end">arity=3</text>
+    <path d="M 71,10 H 65" stroke="#000000" stroke-dasharray="0.8, 0.2"/>
+    <path d="m 57,7 v -3" stroke="#000000" stroke-dasharray="0.8, 0.2"/>
+    <path d="m 46,16 -1,1 v 4 l -1,1 1,1 v 4 l 1,1" fill="none" stroke="#000000"/>
+    <text x="25" y="19" font-size="3.5px" text-anchor="end">frame_size=5</text>
+    <path d="m 28,8 -1,1 v 8 l -1,1 1,1 v 8 l 1,1" fill="none" stroke="#000000"/>
+    <path d="m 56,5 1,-1 1,1" fill="none" stroke="#000000"/>
+    <path d="m 66,9 -1,1 1,1" fill="none" stroke="#000000"/>
+  </g>
+</svg>

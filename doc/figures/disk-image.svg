@@ -1,0 +1,174 @@
+<!--
+This work is licensed under the Creative Commons Attribution NonCommercial
+ShareAlike 4.0 International License. To view a copy of the license, visit
+https://creativecommons.org/licenses/by-nc-sa/4.0/
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="180mm" height="145mm" viewBox="0 0 180 145" version="1.1">
+  <defs/>
+  <g font-family="'Fira Sans'" font-size="3.9px" stroke-width="0.2">
+    <path d="m 11,12 h 14 l -1,4 h 1 l -1,3 h -13 z" fill="#0e6e8e"/>
+    <rect width="5" height="7" x="1" y="12" fill="#bf3959"/>
+    <rect width="5" height="7" x="6" y="12" fill="#cca752"/>
+    <path d="m 123,12 h 13 v 7 h -14 l 1,-4 h -1 z" fill="#0e6e8e"/>
+    <rect width="5" height="7" x="136" y="12" fill="#cca752"/>
+    <path d="m 6,12 v 7" stroke="#000000"/>
+    <path d="m 11,12 v 7" stroke="#000000"/>
+    <path d="m 16,12 v 7" stroke="#000000"/>
+    <path d="m 21,12 v 7" stroke="#000000"/>
+    <path d="m 28,12 h 13 v 7 h -14 l 1,-4 h -1 z" fill="#0e6e8e"/>
+    <path d="m 31,12 v 7" stroke="#000000"/>
+    <path d="m 36,12 v 7" stroke="#000000"/>
+    <path d="m 41,12 v 7" stroke="#000000"/>
+    <path d="m 46,12 v 7" stroke="#000000"/>
+    <path d="m 51,12 v 7" stroke="#000000"/>
+    <path d="m 56,12 v 7" stroke="#000000"/>
+    <path d="m 61,12 v 7" stroke="#000000"/>
+    <path d="m 66,12 v 7" stroke="#000000"/>
+    <path d="m 71,12 v 7" stroke="#000000"/>
+    <path d="m 76,12 v 7" stroke="#000000"/>
+    <path d="m 81,12 v 7" stroke="#000000"/>
+    <path d="m 86,12 v 7" stroke="#000000"/>
+    <path d="m 91,12 v 7" stroke="#000000"/>
+    <path d="m 96,12 v 7" stroke="#000000"/>
+    <path d="m 101,12 v 7" stroke="#000000"/>
+    <path d="m 106,12 h 14 l -1,4 h 1 l -1,3 H 106 Z" fill="#0e6e8e"/>
+    <path d="m 106,12 v 7" stroke="#000000"/>
+    <path d="m 111,12 v 7" stroke="#000000"/>
+    <path d="m 116,12 v 7" stroke="#000000"/>
+    <path d="m 126,12 v 7" stroke="#000000"/>
+    <path d="m 131,12 v 7" stroke="#000000"/>
+    <path d="m 136,12 v 7" stroke="#000000"/>
+    <text x="-11" y="5" font-size="3.52777px" transform="rotate(-90)">0</text>
+    <text x="-11" y="10" font-size="3.52777px" transform="rotate(-90)">1</text>
+    <text x="-11" y="15" font-size="3.52777px" transform="rotate(-90)">2</text>
+    <text x="-11" y="40" font-size="3.52777px" transform="rotate(-90)">33</text>
+    <text x="-11" y="110" font-size="3.52777px" transform="rotate(-90)">2098</text>
+    <text x="-11" y="45" font-size="3.52777px" transform="rotate(-90)">34</text>
+    <text x="-11" y="105" font-size="3.52777px" transform="rotate(-90)">2097</text>
+    <text x="-11" y="135" font-size="3.52777px" transform="rotate(-90)">2129</text>
+    <text x="-11" y="140" font-size="3.52777px" transform="rotate(-90)">2130</text>
+    <path d="M 1,12 H 25 l -1,4 h 1 l -1,3 H 1 Z" fill="none" stroke="#000000"/>
+    <path d="m 123,12 h 18 v 7 h -19 l 1,-4 h -1 z" fill="none" stroke="#000000"/>
+    <path d="m 28,12 h 45 l -1,4 h 1 l -1,3 H 27 l 1,-4 h -1 z" fill="none" stroke="#000000"/>
+    <path d="M 75,12 H 120 l -1,4 h 1 l -1,3 H 74 l 1,-4 h -1 z" fill="none" stroke="#000000"/>
+    <rect width="5" height="7" x="1" y="57" fill="#bf3959"/>
+    <rect width="5" height="7" x="71" y="102" fill="#bf3959"/>
+    <rect width="10" height="7" x="6" y="57" fill="#cca752"/>
+    <path d="m 6,57 v 7" stroke="#000000"/>
+    <path d="m 11,57 v 7" stroke="#000000"/>
+    <rect width="20" height="7" x="61" y="57" fill="#048966"/>
+    <rect width="20" height="7" x="41" y="57" fill="#41a1c1"/>
+    <rect width="20" height="7" x="21" y="57" fill="#0e6e8e"/>
+    <rect width="5" height="7" x="16" y="57" fill="#062f3d"/>
+    <path d="m 16,57 v 7" stroke="#000000"/>
+    <path d="m 21,57 v 7" stroke="#000000"/>
+    <path d="m 31,57 v 7" stroke="#000000"/>
+    <path d="m 26,57 v 7" stroke="#000000"/>
+    <path d="m 36,57 v 7" stroke="#000000"/>
+    <path d="m 41,57 v 7" stroke="#000000"/>
+    <path d="m 46,57 v 7" stroke="#000000"/>
+    <path d="m 51,57 v 7" stroke="#000000"/>
+    <path d="m 56,57 v 7" stroke="#000000"/>
+    <path d="m 61,57 v 7" stroke="#000000"/>
+    <path d="m 66,57 v 7" stroke="#000000"/>
+    <path d="m 71,57 v 7" stroke="#000000"/>
+    <path d="m 76,57 v 7" stroke="#000000"/>
+    <path d="m 81,57 v 7" stroke="#000000"/>
+    <path d="m 86,57 v 7" stroke="#000000"/>
+    <path d="m 91,57 v 7" stroke="#000000"/>
+    <path d="m 96,57 v 7" stroke="#000000"/>
+    <path d="m 101,57 v 7" stroke="#000000"/>
+    <path d="m 106,57 v 7" stroke="#000000"/>
+    <path d="m 121,57 v 7" stroke="#000000"/>
+    <path d="m 116,57 v 7" stroke="#000000"/>
+    <path d="m 126,57 v 7" stroke="#000000"/>
+    <path d="m 131,57 v 7" stroke="#000000"/>
+    <path d="m 136,57 v 7" stroke="#000000"/>
+    <text x="-56" y="5" font-size="3.52777px" transform="rotate(-90)">0</text>
+    <text x="-56" y="10" font-size="3.52777px" transform="rotate(-90)">1</text>
+    <text x="-56" y="20" font-size="3.52777px" transform="rotate(-90)">3</text>
+    <text x="-56" y="25" font-size="3.52777px" transform="rotate(-90)">4</text>
+    <text x="-56" y="45" font-size="3.52777px" transform="rotate(-90)">8</text>
+    <text x="-56" y="85" font-size="3.52777px" transform="rotate(-90)">16</text>
+    <text x="-56" y="140" font-size="3.52777px" transform="rotate(-90)">2063</text>
+    <path d="m 1,57 109,0 -1,4 h 1 l -1,3 -108,0 z" fill="none" stroke="#000000"/>
+    <path d="m 113,57 28,0 v 7 l -29,0 1,-4 h -1 z" fill="none" stroke="#000000"/>
+    <text x="-56" y="65" font-size="3.52777px" transform="rotate(-90)">12</text>
+    <rect width="15" height="7" x="38" y="102" fill="#048966"/>
+    <rect width="4" height="7" x="33" y="102" fill="#bf3959"/>
+    <path d="m 38,102 v 7" stroke="#000000"/>
+    <path d="m 43,102 v 7" stroke="#000000"/>
+    <path d="m 48,102 v 7" stroke="#000000"/>
+    <path d="m 76,102 v 7" stroke="#000000"/>
+    <path d="m 81,102 v 7" stroke="#000000"/>
+    <path d="m 86,102 v 7" stroke="#000000"/>
+    <path d="m 91,102 v 7" stroke="#000000"/>
+    <path d="m 96,102 v 7" stroke="#000000"/>
+    <path d="m 101,102 v 7" stroke="#000000"/>
+    <path d="m 111,102 v 7" stroke="#000000"/>
+    <path d="m 116,102 v 7" stroke="#000000"/>
+    <path d="m 121,102 v 7" stroke="#000000"/>
+    <path d="m 126,102 v 7" stroke="#000000"/>
+    <path d="m 131,102 v 7" stroke="#000000"/>
+    <path d="m 136,102 v 7" stroke="#000000"/>
+    <text x="-101" y="75" font-size="3.52777px" transform="rotate(-90)">0</text>
+    <text x="-101" y="140" font-size="3.52777px" transform="rotate(-90)">2047</text>
+    <path d="m 108,102 h 33 v 7 h -34 l 1,-4 h -1 z" fill="none" stroke="#000000"/>
+    <rect width="20" height="7" x="33" y="102" fill="none" stroke="#000000"/>
+    <path d="M 71,102 H 105 l -1,4 h 1 l -1,3 H 71 Z" fill="none" stroke="#000000"/>
+    <path d="m 87,134 -2,2 v 7 H 91 v -9 z" fill="none" stroke="#000000"/>
+    <path d="m 87,134 v 2 h -2" fill="none" stroke="#000000"/>
+    <path d="m 97.1,133.9 -2,2 v 7 h 6 v -9 z" fill="none" stroke="#000000"/>
+    <path d="m 97.1,133.9 v 2 h -2" fill="none" stroke="#000000"/>
+    <path d="m 107,134 -2,2 v 7 h 6 v -9 z" fill="none" stroke="#000000"/>
+    <path d="m 107,134 v 2 h -2" fill="none" stroke="#000000"/>
+    <path d="m 132,134 -2,2 v 7 h 6 v -9 z" fill="none" stroke="#000000"/>
+    <path d="m 132,134 v 2 h -2" fill="none" stroke="#000000"/>
+    <path d="m 42,134 -2,2 v 7 h 6 v -9 z" fill="none" stroke="#000000"/>
+    <path d="m 42,134 v 2 h -2" fill="none" stroke="#000000"/>
+    <text x="-20" y="5" font-size="3.5px" transform="rotate(-90)" text-anchor="end">MBR</text>
+    <text x="-65" y="5" font-size="3.5px" transform="rotate(-90)" text-anchor="end">boot sector</text>
+    <text x="-45.961941" y="96.873627" font-size="3.5px" transform="rotate(-45)">PE32+ headers</text>
+    <text x="-110" y="75" font-size="3.5px" transform="rotate(-90)" text-anchor="end">superblock</text>
+    <text x="-65" y="10" font-size="3.5px" transform="rotate(-90)" text-anchor="end">FAT</text>
+    <text x="-20" y="10" font-size="3.5px" transform="rotate(-90)" text-anchor="end">GPT header</text>
+    <text x="-20" y="140" font-size="3.5px" transform="rotate(-90)" text-anchor="end">GPT header</text>
+    <text x="26" y="26" font-size="3.5px" text-anchor="middle">GPT entries</text>
+    <text x="17" y="68" font-size="3.5px">/</text>
+    <text x="22" y="68" font-size="3.5px">EFI/</text>
+    <text x="42" y="68" font-size="3.5px">BOOT/</text>
+    <text x="62" y="68" font-size="3.5px">BOOTX64.EFI</text>
+    <text x="111" y="68" font-size="3.5px" text-anchor="middle">TOYSFS</text>
+    <path d="M 73,50 V 25" stroke="#9a9a9a"/>
+    <text x="73" y="39" font-size="3.5px" font-weight="bold" text-anchor="middle">maketoysimg</text>
+    <text x="143" y="17" font-size="3.5px">toys-1.0-amd64.img</text>
+    <text x="143" y="62" font-size="3.5px">fatfs</text>
+    <text x="143" y="107" font-size="3.5px">toysfs</text>
+    <text x="143" y="137" font-size="3.5px">Toy source files</text>
+    <text x="143" y="142" font-size="3.5px">&amp; compiled files</text>
+    <text x="55" y="107" font-size="3.5px">boot.efi</text>
+    <path d="m 11,20 1,1 h 13 l 1,1 1,-1 h 13 l 1,-1" fill="none" stroke="#000000"/>
+    <text x="121" y="26" font-size="3.5px" text-anchor="middle">GPT entries</text>
+    <path d="m 106,20 1,1 h 13 l 1,1 1,-1 h 13 l 1,-1" fill="none" stroke="#000000"/>
+    <path d="M 141,56 V 53 L 106,25 v -3" fill="none" stroke="#000000" stroke-dasharray="0.6 0.6"/>
+    <path d="M 1,56 V 53 L 41,25 v -3" fill="none" stroke="#000000" stroke-dasharray="0.6 0.6"/>
+    <path d="m 53,101 v -3 l 27.9,-28 v -3" fill="none" stroke="#000000" stroke-dasharray="0.6, 0.6"/>
+    <path d="M 33,101 V 98 L 60.9,70 v -3" fill="none" stroke="#000000" stroke-dasharray="0.6 0.6"/>
+    <path d="M 71,101 V 98 L 81,70" fill="none" stroke="#000000" stroke-dasharray="0.6, 0.6"/>
+    <path d="M 141,101 V 67" stroke="#000000" stroke-dasharray="0.6 0.6"/>
+    <path d="m 72,27 1,-2 1,2" fill="none" stroke="#9a9a9a"/>
+    <path d="M 111,97 V 72" stroke="#9a9a9a"/>
+    <text x="111" y="86" font-size="3.5px" font-weight="bold" text-anchor="middle">makefatfs</text>
+    <path d="M 125,131 V 112" stroke="#9a9a9a"/>
+    <text x="125" y="123" font-size="3.5px" font-weight="bold" text-anchor="middle">dumptoysfs</text>
+    <path d="m 110,74 1,-2 1,2" fill="none" stroke="#9a9a9a"/>
+    <path d="M 95,131 V 112" stroke="#9a9a9a"/>
+    <text x="95" y="123" font-size="3.5px" font-weight="bold" text-anchor="middle">maketoysfs</text>
+    <text x="121" y="139" font-size="3.5px" text-anchor="middle">...</text>
+    <path d="M 43,131 V 112" stroke="#9a9a9a"/>
+    <text x="43" y="123" font-size="3.5px" font-weight="bold" text-anchor="middle">makebootefi</text>
+    <path d="m 94,114 1,-2 1,2" fill="none" stroke="#9a9a9a"/>
+    <path d="m 124,129 1,2 1,-2" fill="none" stroke="#9a9a9a"/>
+    <path d="m 42,114 1,-2 1,2" fill="none" stroke="#9a9a9a"/>
+  </g>
+</svg>

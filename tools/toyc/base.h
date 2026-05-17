@@ -1,81 +1,122 @@
-fn panic_result() -> u64 [
-  72,139,52,36,   /*mov rsi,[rsp]*/
-  72,137,231,     /*mov rdi,rsp*/
-  65,184,0,0,0,0, /*mov r8d,0*/
-  195             /*ret*/
-]
+/**
+ * Copyright (c) 2026 Eric Bruneton
+ * All rights reserved.
+ *
+ * This file is part of Toys (https://github.com/ebruneton/toys).
+ *
+ * Toys is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version.
+ *
+ * Toys is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License for more
+ * details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * Toys. If not, see <https://www.gnu.org/licenses/>
+ */
 
-fn panic(error: u64) [
-  72,137,252,   /*mov rsp,rdi*/
-  72,137,52,36, /*mov [rsp],rsi*/
-  195           /*ret*/
-]
+#ifndef _BASE_H_
+#define _BASE_H_
 
-const TC_INTEGER: u64 = 2;
-const TC_IDENTIFIER: u64 = 3;
-const TC_ADD: u64 = 4;
-const TC_SUB: u64 = 5;
-const TC_MUL: u64 = 6;
-const TC_DIV: u64 = 7;
-const TC_BIT_AND: u64 = 8;
-const TC_BIT_OR: u64 = 9;
-const TC_SHIFT_LEFT: u64 = 10;
-const TC_SHIFT_RIGHT: u64 = 11;
-const TC_LT: u64 = 12;
-const TC_GE: u64 = 17;
-const TC_AND: u64 = 18;
-const TC_OR: u64 = 19;
-const TC_ARROW: u64 = 20;
-const TC_AS: u64 = 138;
-const TC_BREAK: u64 = 128;
-const TC_CONST: u64 = 129;
-const TC_ELSE: u64 = 130;
-const TC_FN: u64 = 131;
-const TC_IF: u64 = 132;
-const TC_LET: u64 = 133;
-const TC_LOOP: u64 = 134;
-const TC_NULL: u64 = 139;
-const TC_RETURN: u64 = 135;
-const TC_SIZEOF: u64 = 140;
-const TC_STATIC: u64 = 136;
-const TC_STRUCT: u64 = 141;
-const TC_U32: u64 = 142;
-const TC_WHILE: u64 = 137;
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdlib.h>
 
-const SYM_FN: u64 = 0;
-const SYM_FORWARD_FN: u64 = 1;
-const SYM_VARIABLE: u64 = 2;
-const SYM_CONST: u64 = 3;
-const SYM_STATIC: u64 = 4;
-const SYM_STRUCT: u64 = 5;
-const SYM_FIELD: u64 = 6;
-const SYM_VOID: u64 = 7;
+#define null NULL
 
-struct Symbol {
-  name: &u64,
-  length: u64,
-  kind: u64,
-  value: u64,
-  type: &Symbol,
-  dim: u64,
-  next: &Symbol
+typedef uint8_t u8;
+typedef uint64_t u64;
+
+inline u64 load8(u8 *ptr) { return (u64)*ptr; }
+inline u64 load16(u8 *ptr) { return (load8(ptr + 1) << 8) + load8(ptr); }
+inline u64 load32(u8 *ptr) { return (load16(ptr + 2) << 16) + load16(ptr); }
+
+inline void store8(u8 *ptr, u64 value) { *ptr = (u8)value; }
+
+inline void store16(u8 *ptr, u64 value) {
+  *ptr = value;
+  *(ptr + 1) = value >> 8;
 }
 
-struct Compiler {
-  src: &u64,
-  src_end: &u64,
-  next_char: u64,
-  next_char_type: u64,
-  next_token: u64,
-  next_token_data: u64,
-  next_token_length: u64,
-  dst: &u64,
-  dst_mark: &u64,
-  dst_limit: &u64,
-  heap: &u64,
-  heap_limit: &u64,
-  symbols: &Symbol,
-  fn_return_type: &Symbol,
-  next_register: u64,
-  frame_size: u64
+inline void store32(u8 *ptr, u64 value) {
+  *ptr = value;
+  *(ptr + 1) = value >> 8;
+  *(ptr + 2) = value >> 16;
+  *(ptr + 3) = value >> 24;
 }
+
+void panic(u64 error_code);
+
+#define TC_INTEGER 2
+#define TC_IDENTIFIER 3
+#define TC_ADD 4
+#define TC_SUB 5
+#define TC_MUL 6
+#define TC_DIV 7
+#define TC_BIT_AND 8
+#define TC_BIT_OR 9
+#define TC_SHIFT_LEFT 10
+#define TC_SHIFT_RIGHT 11
+#define TC_LT 12
+#define TC_GE 17
+#define TC_AND 18
+#define TC_OR 19
+#define TC_ARROW 20
+#define TC_AS 138
+#define TC_BREAK 128
+#define TC_CONST 129
+#define TC_ELSE 130
+#define TC_FN 131
+#define TC_IF 132
+#define TC_LET 133
+#define TC_LOOP 134
+#define TC_NULL 139
+#define TC_RETURN 135
+#define TC_SIZEOF 140
+#define TC_STATIC 136
+#define TC_STRUCT 141
+#define TC_U32 142
+#define TC_WHILE 137
+
+#define SYM_FN 0
+#define SYM_FORWARD_FN 1
+#define SYM_VARIABLE 2
+#define SYM_CONST 3
+#define SYM_STATIC 4
+#define SYM_STRUCT 5
+#define SYM_FIELD 6
+#define SYM_VOID 7
+
+typedef struct Symbol {
+  u8* name;
+  u64 length;
+  u64 kind;
+  uintptr_t value;
+  struct Symbol* type;
+  u64 dim;
+  struct Symbol* next;
+} Symbol;
+
+typedef struct Compiler {
+  u8* src;
+  u8* src_end;
+  u8 next_char;
+  u64 next_char_type;
+  u64 next_token;
+  uintptr_t next_token_data;
+  u64 next_token_length;
+  u8* dst;
+  u8* dst_mark;
+  u8* dst_limit;
+  u8* heap;
+  u8* heap_limit;
+  Symbol* symbols;
+  Symbol* fn_return_type;
+  u64 next_register;
+  u64 frame_size;
+} Compiler;
+
+#endif

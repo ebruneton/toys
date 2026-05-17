@@ -1,92 +1,99 @@
-fn write_integer(x: u64) {
-  let quotient = x / 10;
-  x = x - 10 * quotient + '0';
-  if quotient > 0 { write_integer(quotient); }
-  write(STANDARD_OUTPUT, &x, 1);
+/**
+ * Copyright (c) 2026 Eric Bruneton
+ * All rights reserved.
+ *
+ * This file is part of Toys (https://github.com/ebruneton/toys).
+ *
+ * Toys is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version.
+ *
+ * Toys is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License for more
+ * details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * Toys. If not, see <https://www.gnu.org/licenses/>
+ */
+
+#include <stdalign.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "base.h"
+#include "parser.h"
+#include "scanner.h"
+
+#define MAX_SRC_SIZE 65536
+#define MAX_CODE_SIZE 20480
+#define MAX_HEAP_SIZE 49152
+
+static u8 SRC[MAX_SRC_SIZE];
+static u8 DST[MAX_CODE_SIZE];
+
+alignas(max_align_t) u8 HEAP[MAX_HEAP_SIZE];
+
+Compiler compiler;
+
+void panic(const u64 error_code) {
+  printf("%.*s\n", (int) (compiler.src - (SRC + 1)), SRC + 1);
+  printf("ERROR %lu\n", error_code);
+  exit(error_code);
 }
 
-fn write_error(src1: &u64, length1: u64, src2: &u64, length2: u64, error: u64) -> u64 {
-  write(STANDARD_OUTPUT, src1, length1);
-  write(STANDARD_OUTPUT, src2, length2);
-  return error;
-}
-
-static USAGE = ['U','s','a','g','e',':',' ',
-  't','o','y','c',' ','o','u','t','p','u','t',' ',
-  'i','n','p','u','t','1',' ','i','n','p','u','t','2',' ',
-  '.','.','.'];
-
-static CANT_OPEN = ['C','a','n',''','t',' ','o','p','e','n',' '];
-static CANT_READ = ['C','a','n',''','t',' ','r','e','a','d',' '];
-static CANT_WRITE = ['C','a','n',''','t',' ','w','r','i','t','e',' '];
-static ERROR = ['E','r','r','o','r',' '];
-static AT = [' ','a','t',  ' '];
-static IN = [' ','i','n',  ' '];
-
-fn main(args: &u64, args_end: &u64, heap: &u64, heap_limit: &u64) -> u64 {
-  let out_length = 0;
-  let in_length = 0;
-  let out = sh_read_token(&args, args_end, &out_length);
-  let in = sh_read_token(&args, args_end, &in_length);
-  if out == null || in == null {
-    write(STANDARD_OUTPUT, USAGE, 36);
-    return INVALID_ARGUMENT;
+int main(const int argc, const char* argv[]) {
+  if (argc < 3) {
+    printf("Usage: %s <output file> <input files>\n", argv[0]);
+    return 1;
   }
-  const MAX_CODE_SIZE: u64 = 20480;
-  const MAX_HEAP_SIZE: u64 = 49152;
-  const MIN_SRC_SIZE: u64 = 256;
-  heap_limit = heap_limit - 1024;
-  if heap_limit < heap + MAX_CODE_SIZE + sizeof(Compiler) + MAX_HEAP_SIZE + MIN_SRC_SIZE {
-    return OUT_OF_MEMORY;
-  }
-  let error = 0;
-  let dst = heap;
-  let compiler = (dst + MAX_CODE_SIZE) as &Compiler;
-  compiler.dst = dst;
-  compiler.dst_limit = compiler as &u64;
-  compiler.heap = compiler.dst_limit + sizeof(Compiler);
-  compiler.heap_limit = compiler.heap + MAX_HEAP_SIZE;
-  compiler.symbols = null;
-  let src = compiler.heap_limit;
-  error = panic_result();
-  if error != 0 {
-    write(STANDARD_OUTPUT, ERROR, 6);
-    write_integer(error);
-    if in == null { return error; }
-    write(STANDARD_OUTPUT, AT, 4);
-    write_integer(compiler.src - src);
-    return write_error(IN, 4, in, in_length, error);
-  }
-  let stream = 0;
-  let src_size = 0;
-  let last_copied_symbol = compiler.symbols;
-  while in != null {
-    stream = open(in, in_length, 'r');
-    if status(stream) != OK {
-      return write_error(CANT_OPEN, 11, in, in_length, status(stream));
+
+  u64 src_size = 1;
+  for (int i = 2; i < argc; ++i) {
+    FILE* in = fopen(argv[i], "r");
+    if (in == NULL) {
+      printf("Can't open input file\n");
+      return 1;
     }
-    src_size = read(stream, src, heap_limit - src);
-    close(stream);
-    if status(src_size) != OK || src_size == heap_limit - src {
-      return write_error(CANT_READ, 11, in, in_length, status(src_size));
+    const u64 n = fread(SRC + src_size, 1, MAX_SRC_SIZE - src_size, in);
+    if (ferror(in)) {
+      printf("Can't read input file\n");
+      return 1;
     }
-    compiler.src = src - 1;
-    compiler.src_end = src + src_size;
-    tc_read_char(compiler);
-    tc_read_token(compiler);
-    tc_parse_program(compiler);
-    in = sh_read_token(&args, args_end, &in_length);
-    tc_copy_symbol_names(compiler, compiler.symbols, last_copied_symbol);
-    last_copied_symbol = compiler.symbols;
+    if (!feof(in)) {
+      printf("Input file too large\n");
+      return 1;
+    }
+    fclose(in);
+    src_size += n;
   }
-  tc_check_symbols(compiler.symbols, null);
-  stream = open(out, out_length, 'w');
-  if status(stream) != OK {
-    return write_error(CANT_OPEN, 11, out, out_length, status(stream));
+
+  compiler.src = SRC;
+  compiler.src_end = SRC + src_size;
+  compiler.dst = DST;
+  compiler.dst_limit = DST + MAX_CODE_SIZE;
+  compiler.heap = HEAP;
+  compiler.heap_limit = HEAP + MAX_HEAP_SIZE;
+  compiler.symbols = NULL;
+
+  tc_read_char(&compiler);
+  tc_read_token(&compiler);
+  tc_parse_program(&compiler);
+
+  FILE* out = fopen(argv[1], "w");
+  if (out == NULL) {
+    printf("Can't open output file\n");
+    return 1;
   }
-  let n = write(stream, dst, compiler.dst - dst);
-  if status(n) != OK {
-    return write_error(CANT_WRITE, 12, out, out_length, status(n));
+  u64 n = fwrite(DST, 1, compiler.dst - DST, out);
+  if (DST + n != compiler.dst) {
+    printf("Can't write to output file\n");
+    return 1;
   }
-  return OK;
+  fclose(out);
+  return 0;
 }

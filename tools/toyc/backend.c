@@ -1,231 +1,255 @@
-fn mem_allocate(size: u64, ptr_p: &&u64, ptr_limit: &u64) -> &u64 {
-  let ptr = *ptr_p;
-  if size > ptr_limit as u64 || ptr > ptr_limit - size { panic(1); }
+/**
+ * Copyright (c) 2026 Eric Bruneton
+ * All rights reserved.
+ *
+ * This file is part of Toys (https://github.com/ebruneton/toys).
+ *
+ * Toys is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version.
+ *
+ * Toys is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License for more
+ * details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * Toys. If not, see <https://www.gnu.org/licenses/>
+ */
+
+#include "base.h"
+
+u8* mem_allocate(uintptr_t size, u8** ptr_p, u8* ptr_limit) {
+  u8* ptr = *ptr_p;
+  if (size > (uintptr_t) ptr_limit || ptr > ptr_limit - size) { panic(1); }
   *ptr_p = ptr + size;
   return ptr;
 }
 
-fn tc_write8(self: &Compiler, value: u64) {
-  store8(mem_allocate(1, &self.dst, self.dst_limit), value);
+void tc_write8(Compiler* self, u64 value) {
+  store8(mem_allocate(1, &self->dst, self->dst_limit), value);
 }
 
-fn tc_write16(self: &Compiler, value: u64) {
-  store16(mem_allocate(2, &self.dst, self.dst_limit), value);
+void tc_write16(Compiler* self, u64 value) {
+  store16(mem_allocate(2, &self->dst, self->dst_limit), value);
 }
 
-fn tc_write24(self: &Compiler, opcode: u64, args: u64) {
+void tc_write24(Compiler* self, u64 opcode, u64 args) {
   tc_write16(self, opcode);
   tc_write8(self, args);
 }
 
-fn tc_write32(self: &Compiler, value: u64) {
-  store32(mem_allocate(4, &self.dst, self.dst_limit), value);
+void tc_write32(Compiler* self, u64 value) {
+  store32(mem_allocate(4, &self->dst, self->dst_limit), value);
 }
 
-fn tc_write_placeholder(self: &Compiler, placeholder_p: &&u64) {
-  let new_placeholder = self.dst;
-  let last_placeholder = *placeholder_p;
+void tc_write_placeholder(Compiler* self, u8** placeholder_p) {
+  u8* new_placeholder = self->dst;
+  u8* last_placeholder = *placeholder_p;
   *placeholder_p = new_placeholder;
-  if last_placeholder == null { last_placeholder = new_placeholder; }
+  if (last_placeholder == null) { last_placeholder = new_placeholder; }
   tc_write32(self, new_placeholder - last_placeholder);
 }
 
-fn tc_fill_placeholders(placeholder: &u64, value: &u64) {
-  let offset = 0;
-  while placeholder != null {
+void tc_fill_placeholders(u8* placeholder, u8* value) {
+  u64 offset = 0;
+  while (placeholder != null) {
     offset = load32(placeholder);
     store32(placeholder, value - (placeholder + 4));
-    if offset == 0 { break; }
+    if (offset == 0) { break; }
     placeholder = placeholder - offset;
   }
 }
 
-const MAX_REGISTERS: u64 = 8;
+const u64 MAX_REGISTERS = 8;
 
-fn tc_new_register(self: &Compiler) -> u64 {
-  let register = self.next_register;
-  if register >= MAX_REGISTERS { panic(105); }
-  self.next_register = register + 1;
-  return register;
+u64 tc_new_register(Compiler* self) {
+  u64 reg = self->next_register;
+  if (reg >= MAX_REGISTERS) { panic(105); }
+  self->next_register = reg + 1;
+  return reg;
 }
 
-fn tc_save_registers(self: &Compiler, n: u64) {
-  self.frame_size = self.frame_size + n;
-  self.next_register = 0;
-  while n > 0 {
+void tc_save_registers(Compiler* self, u64 n) {
+  self->frame_size = self->frame_size + n;
+  self->next_register = 0;
+  while (n > 0) {
     n = n - 1;
-    tc_write16(self, /*push r{n+8}*/ 20545 | (n << 8));
+    tc_write16(self, /*push r{n+8}*/ 0x5041 | (n << 8));
   }
 }
 
-fn tc_write_cst_insn(self: &Compiler, value: u64) {
-  let z = tc_new_register(self);
-  if value == 0 {
-    tc_write24(self, /*xor r{z+8},r{z+8}*/ 12621, 192 | z << 3 | z);
-  } else if value <= 4294967295 {
-    tc_write16(self, /*mov r{z+8},value32*/ 47169 | (z << 8));
+void tc_write_cst_insn(Compiler* self, u64 value) {
+  u64 z = tc_new_register(self);
+  if (value == 0) {
+    tc_write24(self, /*xor r{z+8},r{z+8}*/ 0x314d, 0xc0 | z << 3 | z);
+  } else if (value <= 0xFFFFFFFF) {
+    tc_write16(self, /*mov r{z+8},value32*/ 0xB841 | (z << 8));
     tc_write32(self, value);
   } else {
-    tc_write16(self, /*movabs r{z+8},value64*/ 47177 | (z << 8));
-    *mem_allocate(8, &self.dst, self.dst_limit) = value;
+    tc_write16(self, /*movabs r{z+8},value64*/ 0xB849 | (z << 8));
+    *((u64*) mem_allocate(8, &self->dst, self->dst_limit)) = value;
   }
 }
 
-fn tc_write_static_insn(self: &Compiler, dst: u64) {
-  let z = tc_new_register(self);
-  tc_write24(self, /*lea r{z+8},[rip+offset32]*/ 36172, 5 | z << 3);
-  tc_write32(self, dst as &u64 - (self.dst + 4));
+void tc_write_static_insn(Compiler* self, u8* dst) {
+  u64 z = tc_new_register(self);
+  tc_write24(self, /*lea r{z+8},[rip+offset32]*/ 0x8d4c, 0x05 | z << 3);
+  tc_write32(self, dst - (self->dst + 4));
 }
 
-fn tc_write_binary_insn(self: &Compiler, token: u64) {
-  let y = self.next_register - 1;
-  let z = y - 1;
-  if token == TC_ADD {
-    tc_write24(self, /*add r{z+8},r{y+8}*/ 845, 192 | z << 3 | y);
-  } else if token == TC_SUB {
-    tc_write24(self, /*sub r{z+8},r{y+8}*/ 11085, 192 | z << 3 | y);
-  } else if token == TC_MUL {
-    tc_write32(self, /*imul r{z+8},r{y+8}*/ 3232698189 | z << 27 | y << 24);
-  } else if token == TC_DIV {
-    tc_write16(self, /*xor edx,edx*/ 53809);
-    tc_write24(self, /*mov rax,r{z+8}*/ 35148, 192 | z << 3);
-    tc_write24(self, /*div r{y+8}*/ 63305, 240 | y);
-    tc_write24(self, /*mov r{z+8},rax*/ 35145, 192 | z);
-  } else if token == TC_BIT_AND {
-    tc_write24(self, /*and r{z+8},r{y+8}*/ 9037, 192 | z << 3 | y);
-  } else if token == TC_BIT_OR {
-    tc_write24(self, /*or r{z+8},r{y+8}*/ 2893, 192 | z << 3 | y);
-  } else if token == TC_SHIFT_LEFT {
-    tc_write24(self, /*mov ecx,r{y+8}*/ 35140, 193 | y << 3);
-    tc_write24(self, /*shl r{z+8},cl*/ 54089, 224 | z);
+void tc_write_binary_insn(Compiler* self, u64 token) {
+  u64 y = self->next_register - 1;
+  u64 z = y - 1;
+  if (token == TC_ADD) {
+    tc_write24(self, /*add r{z+8},r{y+8}*/ 0x034d, 0xc0 | z << 3 | y);
+  } else if (token == TC_SUB) {
+    tc_write24(self, /*sub r{z+8},r{y+8}*/ 0x2b4d, 0xc0 | z << 3 | y);
+  } else if (token == TC_MUL) {
+    tc_write32(self, /*imul r{z+8},r{y+8}*/ 0xc0af0f4d | z << 27 | y << 24);
+  } else if (token == TC_DIV) {
+    tc_write16(self, /*xor edx,edx*/ 0xd231);
+    tc_write24(self, /*mov rax,r{z+8}*/ 0x894c, 0xc0 | z << 3);
+    tc_write24(self, /*div r{y+8}*/ 0xf749, 0xf0 | y);
+    tc_write24(self, /*mov r{z+8},rax*/ 0x8949, 0xc0 | z);
+  } else if (token == TC_BIT_AND) {
+    tc_write24(self, /*and r{z+8},r{y+8}*/ 0x234d, 0xc0 | z << 3 | y);
+  } else if (token == TC_BIT_OR) {
+    tc_write24(self, /*or r{z+8},r{y+8}*/ 0x0b4d, 0xc0 | z << 3 | y);
+  } else if (token == TC_SHIFT_LEFT) {
+    tc_write24(self, /*mov ecx,r{y+8}*/ 0x8944, 0xc1 | y << 3);
+    tc_write24(self, /*shl r{z+8},cl*/ 0xd349, 0xe0 | z);
   } else {
-    tc_write24(self, /*mov ecx,r{y+8}*/ 35140, 193 | y << 3);
-    tc_write24(self, /*shr r{z+8},cl*/ 54089, 232 | z);
+    tc_write24(self, /*mov ecx,r{y+8}*/ 0x8944, 0xc1 | y << 3);
+    tc_write24(self, /*shr r{z+8},cl*/ 0xd349, 0xe8 | z);
   }
-  self.next_register = y;
+  self->next_register = y;
 }
 
-static JUMP_INSTRUCTIONS = [130, 132, 135, 134, 133, 131];
+/* jb, je, ja, jbe, jne, jae */
+static u8 JUMP_INSTRUCTIONS[] = {0x82, 0x84, 0x87, 0x86, 0x85, 0x83};
 
-fn tc_write_jump_insn(self: &Compiler, token: u64, placeholder_p: &&u64) {
-  tc_write32(self, /*cmp r8,r9; j{xx} offset32*/ 264780109);
+void tc_write_jump_insn(Compiler* self, u64 token, u8** placeholder_p) {
+  tc_write32(self, /*cmp r8,r9; j{xx} offset32*/ 0x0fc8394d);
   tc_write8(self, load8(JUMP_INSTRUCTIONS + token - TC_LT));
   tc_write_placeholder(self, placeholder_p);
-  self.next_register = 0;
+  self->next_register = 0;
 }
 
-fn tc_write_goto_insn(self: &Compiler, placeholder_p: &&u64) {
-  tc_write8(self, /*jmp offset32*/ 233);
+void tc_write_goto_insn(Compiler* self, u8** placeholder_p) {
+  tc_write8(self, /*jmp offset32*/ 0xe9);
   tc_write_placeholder(self, placeholder_p);
 }
 
-fn tc_write_loop_insn(self: &Compiler, loop_dst: &u64) {
-  tc_write8(self, /*jmp offset32*/ 233);
-  tc_write32(self, loop_dst - (self.dst + 4));
+void tc_write_loop_insn(Compiler* self, u8* loop_dst) {
+  tc_write8(self, /*jmp offset32*/ 0xe9);
+  tc_write32(self, loop_dst - (self->dst + 4));
 }
 
-fn tc_write_mem_insn(self: &Compiler, insn: u64, modrm: u64, sib: u64, slot: u64) {
+void tc_write_mem_insn(Compiler* self, u64 insn, u64 modrm, u64 sib, u64 slot) {
   tc_write16(self, insn);
-  if slot != 0 { modrm = modrm + 64; }
-  if slot >= 16 { modrm = modrm + 64; }
+  if (slot != 0) modrm = modrm + 0x40;
+  if (slot >= 16) modrm = modrm + 0x40;
   tc_write8(self, modrm);
-  if sib != 0 { tc_write8(self, sib); }
-  if slot >= 16 {
+  if (sib != 0) tc_write8(self, sib);
+  if (slot >= 16) {
     tc_write32(self, slot * 8);
-  } else if slot != 0 {
+  } else if (slot != 0) {
     tc_write8(self, slot * 8);
   }
 }
 
-fn tc_write_load_insn(self: &Compiler, field: u64) {
-  self.dst_mark = self.dst;
-  let z = self.next_register - 1;
-  let sib = 0;
-  if z == 4 { sib = 36; }
-  tc_write_mem_insn(self, /*mov r{z+8},[r{z+8}+offset]*/ 35661, z << 3 | z, sib, field);
+void tc_write_load_insn(Compiler* self, u64 field) {
+  self->dst_mark = self->dst;
+  u64 z = self->next_register - 1;
+  u64 sib = 0;
+  if (z == 4) sib = 0x24;
+  tc_write_mem_insn(self, /*mov r{z+8},[r{z+8}+offset]*/ 0x8b4d, z << 3 | z, sib, field);
 }
 
-fn tc_erase_load_insn(self: &Compiler) {
-  self.dst = self.dst_mark;
+void tc_erase_load_insn(Compiler* self) {
+  self->dst = self->dst_mark;
 }
 
-fn tc_write_store_insn(self: &Compiler, field: u64) {
-  tc_write_mem_insn(self, /*mov [r8+offset],r9*/ 35149, 8, 0, field);
-  self.next_register = 0;
+void tc_write_store_insn(Compiler* self, u64 field) {
+  tc_write_mem_insn(self, /*mov [r8+offset],r9*/ 0x894d, 0x8, 0, field);
+  self->next_register = 0;
 }
 
-fn tc_write_increment_insn(self: &Compiler, insn: u64, modrm: u64, slot: u64) {
-  if slot >= 16 {
+void tc_write_increment_insn(Compiler* self, u64 insn, u64 modrm, u64 slot) {
+  if (slot >= 16) {
     tc_write24(self, insn - 512, modrm);
     tc_write32(self, slot * 8);
-  } else if slot != 0 {
+  } else if (slot != 0) {
     tc_write24(self, insn, modrm);
     tc_write8(self, slot * 8);
   }
 }
 
-fn tc_write_address_of_insn(self: &Compiler, field: u64) {
-  let z = self.next_register - 1;
-  tc_write_increment_insn(self, /*add r{z+8},offset*/ 33609, 192 | z, field);
+void tc_write_address_of_insn(Compiler* self, u64 field) {
+  u64 z = self->next_register - 1;
+  tc_write_increment_insn(self, /*add r{z+8},offset*/ 0x8349, 0xc0 | z, field);
 }
 
-fn tc_write_ptr_insn(self: &Compiler, variable: u64) {
-  let z = tc_new_register(self);
-  tc_write_mem_insn(self, /*lea r{z+8},[rsp+offset]*/ 36172, 4 | z << 3, 36,
-      self.frame_size - variable);
+void tc_write_ptr_insn(Compiler* self, u64 variable) {
+  u64 z = tc_new_register(self);
+  tc_write_mem_insn(self, /*lea r{z+8},[rsp+offset]*/ 0x8d4c, 0x04 | z << 3, 0x24,
+      self->frame_size - variable);
 }
 
-fn tc_write_get_insn(self: &Compiler, variable: u64) {
-  self.dst_mark = self.dst;
-  let z = tc_new_register(self);
-  tc_write_mem_insn(self, /*mov r{z+8},[rsp+offset]*/ 35660, 4 | z << 3, 36,
-      self.frame_size - variable);
+void tc_write_get_insn(Compiler* self, u64 variable) {
+  self->dst_mark = self->dst;
+  u64 z = tc_new_register(self);
+  tc_write_mem_insn(self, /*mov r{z+8},[rsp+offset]*/ 0x8b4c, 0x04 | z << 3, 0x24,
+      self->frame_size - variable);
 }
 
-fn tc_erase_get_insn(self: &Compiler) {
-  self.dst = self.dst_mark;
-  self.next_register = self.next_register - 1;
+void tc_erase_get_insn(Compiler* self) {
+  self->dst = self->dst_mark;
+  self->next_register = self->next_register - 1;
 }
 
-fn tc_write_set_insn(self: &Compiler, variable: u64) {
-  tc_write_mem_insn(self, /*mov [rsp+offset],r8*/ 35148, 4, 36, self.frame_size - variable);
-  self.next_register = 0;
+void tc_write_set_insn(Compiler* self, u64 variable) {
+  tc_write_mem_insn(self, /*mov [rsp+offset],r8*/ 0x894c, 0x04, 0x24, self->frame_size - variable);
+  self->next_register = 0;
 }
 
-fn tc_write_pop_insn(self: &Compiler) { self.next_register = 0; }
+void tc_write_pop_insn(Compiler* self) { self->next_register = 0; }
 
-fn tc_write_fn_insn(self: &Compiler, arity: u64) {
-  if arity > MAX_REGISTERS { panic(107); }
-  self.frame_size = 0;
+void tc_write_fn_insn(Compiler* self, u64 arity) {
+  if (arity > MAX_REGISTERS) { panic(107); }
+  self->frame_size = 0;
   tc_save_registers(self, arity);
 }
 
-fn tc_write_call_insn(self: &Compiler, function: &Symbol, saved_registers: u64) {
-  tc_write8(self, /*call offset32*/ 232);
-  if function.kind == SYM_FORWARD_FN {
-    tc_write_placeholder(self, &function.value as &&u64);
+void tc_write_call_insn(Compiler* self, Symbol* function, u64 saved_registers) {
+  tc_write8(self, /*call offset32*/ 0xe8);
+  if (function->kind == SYM_FORWARD_FN) {
+    tc_write_placeholder(self, (u8**) &function->value);
   } else {
-    tc_write32(self, function.value as &u64 - (self.dst + 4));
+    tc_write32(self, (u8*) function->value - (self->dst + 4));
   }
-  if function.type.kind != SYM_VOID {
-    if saved_registers != 0 {
-      tc_write24(self, /*mov r{z+8},r8*/ 35149, 192 | saved_registers);
+  if (function->type->kind != SYM_VOID) {
+    if (saved_registers != 0) {
+      tc_write24(self, /*mov r{z+8},r8*/ 0x894d, 0xc0 | saved_registers);
     }
-    if saved_registers >= MAX_REGISTERS { panic(108); }
-    self.next_register = saved_registers + 1;
+    if (saved_registers >= MAX_REGISTERS) { panic(108); }
+    self->next_register = saved_registers + 1;
   } else {
-    self.next_register = saved_registers;
+    self->next_register = saved_registers;
   }
-  self.frame_size = self.frame_size - saved_registers;
-  let z = 0;
-  while z < saved_registers {
-    tc_write16(self, /*pop r{z+8}*/ 22593 | z << 8);
+  self->frame_size = self->frame_size - saved_registers;
+  u64 z = 0;
+  while (z < saved_registers) {
+    tc_write16(self, /*pop r{z+8}*/ 0x5841 | z << 8);
     z = z + 1;
   }
 }
 
-fn tc_write_return_insn(self: &Compiler) {
-  tc_write_increment_insn(self, /*add rsp,offset*/ 33608, 196, self.frame_size);
-  tc_write8(self, /*ret*/ 195);
-  self.next_register = 0;
+void tc_write_return_insn(Compiler* self) {
+  tc_write_increment_insn(self, /*add rsp,offset*/ 0x8348, 0xc4, self->frame_size);
+  tc_write8(self, /*ret*/ 0xc3);
+  self->next_register = 0;
 }
+

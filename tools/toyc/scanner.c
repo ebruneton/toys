@@ -1,4 +1,26 @@
-static TC_CHAR_TYPES = [
+/**
+ * Copyright (c) 2026 Eric Bruneton
+ * All rights reserved.
+ *
+ * This file is part of Toys (https://github.com/ebruneton/toys).
+ *
+ * Toys is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version.
+ *
+ * Toys is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License for more
+ * details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * Toys. If not, see <https://www.gnu.org/licenses/>
+ */
+
+#include "base.h"
+
+static u8 TC_CHAR_TYPES[] = {
   1,1,1,1,1,1,1,1,1,32,32,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
   32,10,1,1,1,1,11,39,40,41,6,4,44,16,46,7,2,2,2,2,2,2,2,2,2,2,58,59,12,13,
   14,1,1,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,91,1,93,1,3,
@@ -6,12 +28,14 @@ static TC_CHAR_TYPES = [
   1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
   1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
   1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1];
+  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
+};
 
-static TC_OPERATORS = [
-  1,1,16,1,8,18,1,1,12,10,15,1,61,13,13,1,14,11,17,11,9,19,1,1,5,1,1,20];
+static u8 TC_OPERATORS[] = {
+  1,1,16,1,8,18,1,1,12,10,15,1,61,13,13,1,14,11,17,11,9,19,1,1,5,1,1,20
+};
 
-static TC_KEYWORDS = [
+static u8 TC_KEYWORDS[] = {
   0,0,0,0,0,0,0,107,88,0,0,0,0,0,0,0,0,0,0,0,0,137,
   0,0,121,0,0,96,0,92,0,0,0,0,0,75,101,0,0,0,0,0,0,0,
   0,0,129,0,113,150,64,145,0,0,0,0,0,82,0,0,0,0,0,68,
@@ -29,120 +53,122 @@ static TC_KEYWORDS = [
   6,'s','t','a','t','i','c',136,
   6,'s','t','r','u','c','t',141,
   3,'u','6','4',142,
-  5,'w','h','i','l','e',137];
+  5,'w','h','i','l','e',137
+};
 
-fn mem_compare(ptr1: &u64, ptr2: &u64, size: u64) -> u64 {
-  let i = 0;
-  while i < size && load8(ptr1 + i) == load8(ptr2 + i) {
+u64 mem_compare(u8* ptr1, u8* ptr2, u64 size) {
+  u64 i = 0;
+  while (i < size && load8(ptr1 + i) == load8(ptr2 + i)) {
     i = i + 1;
   }
   return size - i;
 }
 
-fn tc_get_keyword(start: &u64, length: u64, hashcode: u64) -> u64 {
-  let keyword = load8(TC_KEYWORDS + hashcode);
-  if keyword != 0 &&
+u64 tc_get_keyword(u8* start, u64 length, u64 hashcode) {
+  u8 keyword = load8(TC_KEYWORDS + hashcode);
+  if (keyword != 0 &&
     length == load8(TC_KEYWORDS + keyword) &&
-    mem_compare(start, TC_KEYWORDS + keyword + 1, length) == 0 {
+    mem_compare(start, TC_KEYWORDS + keyword + 1, length) == 0) {
       return load8(TC_KEYWORDS + keyword + length + 1);
   }
   return TC_IDENTIFIER;
 }
 
-fn tc_read_char(self: &Compiler) -> u64 {
-  let src = self.src;
-  let src_end = self.src_end;
-  if src >= src_end { panic(10); }
+u64 tc_read_char(Compiler* self) {
+  u8* src = self->src;
+  u8* src_end = self->src_end;
+  if (src >= src_end) { panic(10); }
   src = src + 1;
-  let c = 0;
-  let type = 0;
-  if src < src_end {
+  u8 c = 0;
+  u64 type = 0;
+  if (src < src_end) {
     c = load8(src);
     type = load8(TC_CHAR_TYPES + c);
   }
-  self.src = src;
-  self.next_char = c;
-  self.next_char_type = type;
+  self->src = src;
+  self->next_char = c;
+  self->next_char_type = type;
   return type;
 }
 
-fn tc_read_integer(self: &Compiler) -> u64 {
-  let type = self.next_char_type;
-  let v = 0;
-  while type == TC_INTEGER {
-    v = v * 10 + (self.next_char - '0');
+u64 tc_read_integer(Compiler* self) {
+  u64 type = self->next_char_type;
+  u64 v = 0;
+  while (type == TC_INTEGER) {
+    v = v * 10 + (self->next_char - '0');
     type = tc_read_char(self);
   }
-  self.next_token_data = v;
+  self->next_token_data = v;
   return TC_INTEGER;
 }
 
-fn tc_read_quoted_char(self: &Compiler) -> u64 {
+u64 tc_read_quoted_char(Compiler* self) {
   tc_read_char(self);
-  let value = self.next_char;
-  if value < 32 || value >= 127 { panic(11); }
-  if tc_read_char(self) != ''' { panic(12); }
+  u8 value = self->next_char;
+  if (value < 32 || value >= 127) { panic(11); }
+  if (tc_read_char(self) != '\'') { panic(12); }
   tc_read_char(self);
-  self.next_token_data = value;
+  self->next_token_data = value;
   return TC_INTEGER;
 }
 
-fn tc_read_identifier(self: &Compiler) -> u64 {
-  let hashcode = 0;
-  let start = self.src;
-  let type = self.next_char_type;
-  while type == TC_IDENTIFIER || type == TC_INTEGER {
-    hashcode = 31 * hashcode + self.next_char;
+u64 tc_read_identifier(Compiler* self) {
+  u64 hashcode = 0;
+  u8* start = self->src;
+  u64 type = self->next_char_type;
+  while (type == TC_IDENTIFIER || type == TC_INTEGER) {
+    hashcode = 31 * hashcode + self->next_char;
     type = tc_read_char(self);
   }
-  let length = self.src - start;
-  self.next_token_data = start as u64;
-  self.next_token_length = length;
+  u64 length = self->src - start;
+  self->next_token_data = (uintptr_t) start;
+  self->next_token_length = length;
   return tc_get_keyword(start, length, hashcode & 63);
 }
 
-fn tc_read_operator(self: &Compiler, first_char_type: u64) -> u64 {
-  let second_char_type = tc_read_char(self);
-  let index = 4 * (first_char_type - 10);
-  if second_char_type == first_char_type {
+u64 tc_read_operator(Compiler* self, u64 first_char_type) {
+  u64 second_char_type = tc_read_char(self);
+  u64 index = 4 * (first_char_type - 10);
+  if (second_char_type == first_char_type) {
     tc_read_char(self);
     index = index + 1;
-  } else if self.next_char == '=' {
+  } else if (self->next_char == '=') {
     tc_read_char(self);
     index = index + 2;
-  } else if self.next_char == '>' {
+  } else if (self->next_char == '>') {
     tc_read_char(self);
     index = index + 3;
   }
   return load8(TC_OPERATORS + index);
 }
 
-fn tc_read_comment(self: &Compiler, src: &u64) -> u64 {
-  if src + 1 >= self.src_end || load8(src + 1) != '*' { return 0; }
-  while src + 3 < self.src_end && load16(src + 2) != 12074 {
+u64 tc_read_comment(Compiler* self, u8* src) {
+  if (src + 1 >= self->src_end || load8(src + 1) != '*') { return 0; }
+  while (src + 3 < self->src_end && load16(src + 2) != 12074) {
     src = src + 1;
   }
-  self.src = src + 3; /* The last '/' is NOT read. */
+  self->src = src + 3; /* The last '/' is NOT read. */
   return 1;
 }
 
-fn tc_read_token(self: &Compiler) {
-  let type = self.next_char_type;
-  while type == ' ' || type == TC_DIV {
-    if type == TC_DIV && tc_read_comment(self, self.src) == 0 { break; }
+void tc_read_token(Compiler* self) {
+  u64 type = self->next_char_type;
+  while (type == ' ' || type == TC_DIV) {
+    if (type == TC_DIV && tc_read_comment(self, self->src) == 0) { break; }
     type = tc_read_char(self);
   }
-  let token = type;
-  if type == TC_INTEGER {
+  u64 token = type;
+  if (type == TC_INTEGER) {
     token = tc_read_integer(self);
-  } else if type == ''' {
+  } else if (type == '\'') {
     token = tc_read_quoted_char(self);
-  } else if type == TC_IDENTIFIER {
+  } else if (type == TC_IDENTIFIER) {
     token = tc_read_identifier(self);
-  } else if type >= 10 && type < 20 {
+  } else if (type >= 10 && type < 20) {
     token = tc_read_operator(self, type);
-  } else if type != 0 {
+  } else if (type != 0) {
     tc_read_char(self);
   }
-  self.next_token = token;
+  self->next_token = token;
 }
+

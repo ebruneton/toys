@@ -1,69 +1,69 @@
-fn mem_allocate(size: u32, ptr_p: &&u32, ptr_limit: &u32) -> &u32 {
+fn mem_allocate(size: u64, ptr_p: &&u64, ptr_limit: &u64) -> &u64 {
   let ptr = *ptr_p;
-  if size > ptr_limit as u32 || ptr > ptr_limit - size { panic(1); }
+  if size > ptr_limit as u64 || ptr > ptr_limit - size { panic(1); }
   *ptr_p = ptr + size;
   return ptr;
 }
 
-fn tc_write8(self: &Compiler, value: u32) {
+fn tc_write8(self: &Compiler, value: u64) {
   store8(mem_allocate(1, &self.dst, self.dst_limit), value);
 }
 
-fn tc_write16(self: &Compiler, value: u32) {
+fn tc_write16(self: &Compiler, value: u64) {
   store16(mem_allocate(2, &self.dst, self.dst_limit), value);
 }
 
-fn tc_write32(self: &Compiler, value: u32) {
+fn tc_write32(self: &Compiler, value: u64) {
   *mem_allocate(4, &self.dst, self.dst_limit) = value;
 }
 
 fn tc_write_padding(self: &Compiler) {
-  if self.dst as u32 & 1 == 1 { tc_write8(self, 0); }
+  if self.dst as u64 & 1 == 1 { tc_write8(self, 0); }
 }
 
-fn tc_write_move16_insn(self: &Compiler, z: u32, c: u32, top: u32) {
+fn tc_write_move16_insn(self: &Compiler, z: u64, c: u64, top: u64) {
   tc_write32(self, /*MOVW_RZ_C*/62016 | (((c >> 8) & 7) << 28) |
       (z << 24) | ((c & 255) << 16) | (((c >> 11) & 1) << 10) |
       (top << 7) | ((c >> 12) & 15));
 }
 
-fn tc_write_add_or_sub_insn(self: &Compiler, op: u32, z: u32, y: u32) {
+fn tc_write_add_or_sub_insn(self: &Compiler, op: u64, z: u64, y: u64) {
   tc_write16(self, op | (y << 6) | (z << 3) | z);
 }
 
-fn tc_write_add_const_insn(self: &Compiler, op: u32, z: u32, c: u32) {
+fn tc_write_add_const_insn(self: &Compiler, op: u64, z: u64, c: u64) {
   if c > 255 { panic(100); }
   tc_write16(self, op | (z << 8) | c);
 }
 
-fn tc_write_math_insn(self: &Compiler, op: u32, z: u32, x: u32) {
+fn tc_write_math_insn(self: &Compiler, op: u64, z: u64, x: u64) {
   tc_write16(self, op | (x << 3) | z);
 }
 
-fn tc_write_stack_insn(self: &Compiler, op: u32, z: u32, c: u32) {
+fn tc_write_stack_insn(self: &Compiler, op: u64, z: u64, c: u64) {
   if c > 255 { panic(101); }
   tc_write16(self, op | (z << 8) | c);
 }
 
-fn tc_write_heap_insn(self: &Compiler, op: u32, z: u32, x: u32, c: u32) {
+fn tc_write_heap_insn(self: &Compiler, op: u64, z: u64, x: u64, c: u64) {
   if c > 31 { panic(102); }
   tc_write16(self, op | (c << 6) | (x << 3) | z);
 }
 
-fn tc_get_branch_insn(dst: &u32, target: &u32) -> u32 {
+fn tc_get_branch_insn(dst: &u64, target: &u64) -> u64 {
   let pc = dst + 4;
   if target >= pc + 2048 || pc > target + 2048 { panic(103); }
   return /*B_2C*/57344 | (((target - pc) & /*(1<<12)-1*/4095) >> 1);
 }
 
-fn tc_get_branch_with_link_insn(dst: &u32, target: &u32) -> u32 {
+fn tc_get_branch_with_link_insn(dst: &u64, target: &u64) -> u64 {
   let pc = dst + 4;
   if target >= pc + 4194304 || pc > target + 4194304 { panic(104); }
   let offset = (target - pc) & /*(1<<23)-1*/8388607;
   return /*BL_2C*/4160811008 | ((offset & 4095) << 15) | (offset >> 12);
 }
 
-fn tc_write_placeholder(self: &Compiler, placeholder_p: &&u32) {
+fn tc_write_placeholder(self: &Compiler, placeholder_p: &&u64) {
   let new_placeholder = self.dst;
   let last_placeholder = *placeholder_p;
   *placeholder_p = new_placeholder;
@@ -71,16 +71,16 @@ fn tc_write_placeholder(self: &Compiler, placeholder_p: &&u32) {
   tc_write16(self, new_placeholder - last_placeholder);
 }
 
-fn tc_fill_placeholders(placeholder: &u32, value: u32) {
-  let previous: &u32 = null;
+fn tc_fill_placeholders(placeholder: &u64, value: u64) {
+  let previous: &u64 = null;
   while placeholder != null {
-    previous = *placeholder as &u32;
-    *placeholder = tc_get_branch_with_link_insn(placeholder, value as &u32);
+    previous = *placeholder as &u64;
+    *placeholder = tc_get_branch_with_link_insn(placeholder, value as &u64);
     placeholder = previous;
   }
 }
 
-fn tc_fill_label_placeholders(self: &Compiler, placeholder: &u32) {
+fn tc_fill_label_placeholders(self: &Compiler, placeholder: &u64) {
   let offset = 0;
   while placeholder != null {
     offset = load16(placeholder);
@@ -90,22 +90,22 @@ fn tc_fill_label_placeholders(self: &Compiler, placeholder: &u32) {
   }
 }
 
-const MAX_REGISTERS: u32 = 8;
+const MAX_REGISTERS: u64 = 8;
 
-fn tc_new_register(self: &Compiler) -> u32 {
+fn tc_new_register(self: &Compiler) -> u64 {
   let register = self.next_register;
   if register >= MAX_REGISTERS { panic(105); }
   self.next_register = register + 1;
   return register;
 }
 
-fn tc_save_registers(self: &Compiler, n: u32, link_register: u32) {
+fn tc_save_registers(self: &Compiler, n: u64, link_register: u64) {
   tc_write16(self, /*PUSH*/46080 | (link_register << 8) | ((1 << n) - 1));
   self.frame_size = self.frame_size + n;
   self.next_register = 0;
 }
 
-fn tc_write_cst_insn(self: &Compiler, value: u32) {
+fn tc_write_cst_insn(self: &Compiler, value: u64) {
   let register = tc_new_register(self);
   if value < 256 {
     tc_write16(self, /*MOV_RZ_C*/8192 | (register << 8) | value);
@@ -117,15 +117,15 @@ fn tc_write_cst_insn(self: &Compiler, value: u32) {
   }
 }
 
-fn tc_write_static_insn(self: &Compiler, dst: u32) {
+fn tc_write_static_insn(self: &Compiler, dst: u64) {
   let z = tc_new_register(self);
-  let offset = (((self.dst as u32 + 4) >> 2) << 2) - dst;
+  let offset = (((self.dst as u64 + 4) >> 2) << 2) - dst;
   if offset > 4095 { panic(106); }
   tc_write32(self, /*ADR_RZ_C*/62127 | (((offset >> 8) & 7) << 28) |
       (z << 24) | ((offset & 255) << 16) | (((offset >> 11) & 1) << 10));
 }
 
-fn tc_write_binary_insn(self: &Compiler, token: u32) {
+fn tc_write_binary_insn(self: &Compiler, token: u64) {
   let y = self.next_register - 1;
   let z = y - 1;
   if token == TC_ADD {
@@ -150,46 +150,46 @@ fn tc_write_binary_insn(self: &Compiler, token: u32) {
 
 static IF_THEN_CONDITION = [48, 0, 128, 144, 16, 32];
 
-fn tc_write_jump_insn(self: &Compiler, token: u32, placeholder_p: &&u32) {
+fn tc_write_jump_insn(self: &Compiler, token: u64, placeholder_p: &&u64) {
   tc_write16(self, /*CMP_R0_R1*/17032);
   tc_write16(self, /*IT*/48904 | load8(IF_THEN_CONDITION + token - TC_LT));
   tc_write_placeholder(self, placeholder_p);
   self.next_register = 0;
 }
 
-fn tc_write_goto_insn(self: &Compiler, placeholder_p: &&u32) {
+fn tc_write_goto_insn(self: &Compiler, placeholder_p: &&u64) {
   tc_write_placeholder(self, placeholder_p);
 }
 
-fn tc_write_loop_insn(self: &Compiler, loop_dst: &u32) {
+fn tc_write_loop_insn(self: &Compiler, loop_dst: &u64) {
   tc_write16(self, tc_get_branch_insn(self.dst, loop_dst));
 }
 
-fn tc_write_load_insn(self: &Compiler, field: u32) {
+fn tc_write_load_insn(self: &Compiler, field: u64) {
   let z = self.next_register - 1;
   tc_write_heap_insn(self, /*LDR_RZ_RX_4C*/26624, z, z, field);
 }
 
 fn tc_erase_load_insn(self: &Compiler) { self.dst = self.dst - 2; }
 
-fn tc_write_store_insn(self: &Compiler, field: u32) {
+fn tc_write_store_insn(self: &Compiler, field: u64) {
   tc_write_heap_insn(self, /*STR_RZ_RX_4C*/24576, 1, 0, field);
   self.next_register = 0;
 }
 
-fn tc_write_address_of_insn(self: &Compiler, field: u32) {
+fn tc_write_address_of_insn(self: &Compiler, field: u64) {
   let z = self.next_register - 1;
   if field != 0 {
     tc_write_add_const_insn(self, /*ADD_RZ_RZ_C*/12288, z, field << 2);
   }
 }
 
-fn tc_write_ptr_insn(self: &Compiler, variable: u32) {
+fn tc_write_ptr_insn(self: &Compiler, variable: u64) {
   tc_write_add_const_insn(self, /*ADD_RZ_SP_4C*/43008,
       tc_new_register(self), self.frame_size - variable);
 }
 
-fn tc_write_get_insn(self: &Compiler, variable: u32) {
+fn tc_write_get_insn(self: &Compiler, variable: u64) {
   tc_write_stack_insn(self, /*LDR_RZ_SP_4C*/38912,
       tc_new_register(self), self.frame_size - variable);
 }
@@ -199,29 +199,29 @@ fn tc_erase_get_insn(self: &Compiler) {
   self.next_register = self.next_register - 1;
 }
 
-fn tc_write_set_insn(self: &Compiler, variable: u32) {
+fn tc_write_set_insn(self: &Compiler, variable: u64) {
   tc_write_stack_insn(self, /*STR_RZ_SP_4C*/36864, 0, self.frame_size - variable);
   self.next_register = 0;
 }
 
 fn tc_write_pop_insn(self: &Compiler) { self.next_register = 0; }
 
-fn tc_write_fn_insn(self: &Compiler, arity: u32) {
+fn tc_write_fn_insn(self: &Compiler, arity: u64) {
   if arity > MAX_REGISTERS { panic(107); }
   self.frame_size = 0;
   tc_save_registers(self, arity, 1);
 }
 
-fn tc_get_fn_value(self: &Compiler, fn_dst: u32) -> u32 { return fn_dst; }
+fn tc_get_fn_value(self: &Compiler, fn_dst: u64) -> u64 { return fn_dst; }
 
-fn tc_write_call_insn(self: &Compiler, function: &Symbol, saved_registers: u32)
+fn tc_write_call_insn(self: &Compiler, function: &Symbol, saved_registers: u64)
 {
   let dst = self.dst;
   if function.kind == SYM_FORWARD_FN {
     tc_write32(self, function.value);
-    function.value = dst as u32;
+    function.value = dst as u64;
   } else {
-    tc_write32(self, tc_get_branch_with_link_insn(dst, function.value as &u32));
+    tc_write32(self, tc_get_branch_with_link_insn(dst, function.value as &u64));
   }
   if function.type.kind != SYM_VOID {
     if saved_registers != 0 {

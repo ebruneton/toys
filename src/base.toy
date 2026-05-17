@@ -1,20 +1,20 @@
-fn main(args: &u32, args_end: &u32, heap: &u32, heap_limit: &u32) -> u32;
+fn main(args: &u64, args_end: &u64, heap: &u64, heap_limit: &u64) -> u64;
 
-fn exit(result: u32) -> u32;
+fn exit(result: u64) -> u64;
 
-fn entry(heap: &u32, heap_limit: &u32) {
+fn entry(heap: &u64, heap_limit: &u64) {
   let args = heap + 4;
   let args_end = args + *heap;
-  heap = (((args_end as u32 + 3) >> 2) << 2) as &u32;
+  heap = (((args_end as u64 + 3) >> 2) << 2) as &u64;
   exit(main(args, args_end, heap, heap_limit));
 }
 
-fn load8(ptr: &u32) -> u32 [ /*LDRB_R0_R0_0*/30720; /*MOV_PC_LR*/18167; ]
-fn load16(ptr: &u32) -> u32 [ /*LDRH_R0_R0_0*/34816; /*MOV_PC_LR*/18167; ]
-fn store8(ptr: &u32, value: u32) [ /*STRB_R1_R0_0*/28673; /*MOV_PC_LR*/18167; ]
-fn store16(ptr: &u32, value: u32) [ /*STRH_R1_R0_0*/32769; /*MOV_PC_LR*/18167; ]
+fn load8(ptr: &u64) -> u64 [ /*LDRB_R0_R0_0*/30720; /*MOV_PC_LR*/18167; ]
+fn load16(ptr: &u64) -> u64 [ /*LDRH_R0_R0_0*/34816; /*MOV_PC_LR*/18167; ]
+fn store8(ptr: &u64, value: u64) [ /*STRB_R1_R0_0*/28673; /*MOV_PC_LR*/18167; ]
+fn store16(ptr: &u64, value: u64) [ /*STRH_R1_R0_0*/32769; /*MOV_PC_LR*/18167; ]
 
-fn sh_read_token(src_p: &&u32, src_end: &u32, length: &u32) -> &u32 {
+fn sh_read_token(src_p: &&u64, src_end: &u64, length: &u64) -> &u64 {
   let src = *src_p;
   while src < src_end && load8(src) == ' ' { src = src + 1; }
   if src >= src_end { return null; }
@@ -25,63 +25,63 @@ fn sh_read_token(src_p: &&u32, src_end: &u32, length: &u32) -> &u32 {
   return token;
 }
 
-fn system_call(id: u32, args: &u32) -> u32 [
+fn system_call(id: u64, args: &u64) -> u64 [
   /*SVC*/ 57088;
   /*MOV_PC_LR*/ 18167;
 ]
 
-const OK: u32 = 0;
-const INVALID_ARGUMENT: u32 = 1;
-const INVALID_STATE: u32 = 2;
-const NOT_FOUND: u32 = 3;
-const ALREADY_EXISTS: u32 = 4;
-const OUT_OF_MEMORY: u32 = 5;
-const INTERNAL_ERROR: u32 = 6;
+const OK: u64 = 0;
+const INVALID_ARGUMENT: u64 = 1;
+const INVALID_STATE: u64 = 2;
+const NOT_FOUND: u64 = 3;
+const ALREADY_EXISTS: u64 = 4;
+const OUT_OF_MEMORY: u64 = 5;
+const INTERNAL_ERROR: u64 = 6;
 
-fn status(result: u32) -> u32 { return result >> 24; }
+fn status(result: u64) -> u64 { return result >> 24; }
 
-fn spawn(dst: &u32, name: &u32, name_length: u32,
-    args: &u32, args_length: u32, output_p: &&u32) -> u32 {
-  return system_call(0, &dst as &u32);
+fn spawn(dst: &u64, name: &u64, name_length: u64,
+    args: &u64, args_length: u64, output_p: &&u64) -> u64 {
+  return system_call(0, &dst as &u64);
 }
 
-fn exit(result: u32) -> u32 {
+fn exit(result: u64) -> u64 {
   return system_call(1, &result);
 }
 
-fn sleep(millis: u32) -> u32 {
+fn sleep(millis: u64) -> u64 {
   return system_call(2, &millis);
 }
 
-fn stat(name: &u32, length: u32) -> u32 {
-  return system_call(3, &name as &u32);
+fn stat(name: &u64, length: u64) -> u64 {
+  return system_call(3, &name as &u64);
 }
 
-fn open(name: &u32, length: u32, mode: u32) -> u32 {
-  return system_call(4, &name as &u32);
+fn open(name: &u64, length: u64, mode: u64) -> u64 {
+  return system_call(4, &name as &u64);
 }
 
-const STANDARD_INPUT: u32 = 0;
-const STANDARD_OUTPUT: u32 = 1;
-const KEYBOARD: u32 = 2;
-const GPU: u32 = 3;
+const STANDARD_INPUT: u64 = 0;
+const STANDARD_OUTPUT: u64 = 1;
+const KEYBOARD: u64 = 2;
+const GPU: u64 = 3;
 
-fn read(stream_id: u32, buffer: &u32, size: u32) -> u32 {
+fn read(stream_id: u64, buffer: &u64, size: u64) -> u64 {
   return system_call(5, &stream_id);
 }
 
-fn write(stream_id: u32, buffer: &u32, size: u32) -> u32 {
+fn write(stream_id: u64, buffer: &u64, size: u64) -> u64 {
   return system_call(6, &stream_id);
 }
 
-fn close(stream_id: u32) -> u32 {
+fn close(stream_id: u64) -> u64 {
   return system_call(7, &stream_id);
 }
 
-fn delete(name: &u32, length: u32) -> u32 {
-  return system_call(8, &name as &u32);
+fn delete(name: &u64, length: u64) -> u64 {
+  return system_call(8, &name as &u64);
 }
 
-fn reboot(mode: u32) -> u32 {
+fn reboot(mode: u64) -> u64 {
   return system_call(9, &mode);
 }

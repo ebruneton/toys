@@ -1,19 +1,19 @@
-const NUM_COMMANDS: u32 = 4;
-const MAX_COMMAND_LENGTH: u32 = 196;
-const MAX_OUTPUT_SIZE: u32 = 512;
+const NUM_COMMANDS: u64 = 4;
+const MAX_COMMAND_LENGTH: u64 = 196;
+const MAX_OUTPUT_SIZE: u64 = 512;
 
 struct Command {
   previous: &Command,
   next: &Command,
-  length: u32,
-  data: u32
+  length: u64,
+  data: u64
 }
 
 struct Shell {
   commands: &Command,
-  output_begin: &u32,
-  output_end: &u32,
-  output_limit: &u32
+  output_begin: &u64,
+  output_end: &u64,
+  output_limit: &u64
 }
 
 fn command_copy(src: &Command, dst: &Command) {
@@ -21,7 +21,7 @@ fn command_copy(src: &Command, dst: &Command) {
   mem_copy_non_overlapping(&src.data, &dst.data, src.length);
 }
 
-fn sh_new(heap_p: &&u32, heap_limit: &u32) -> &Shell {
+fn sh_new(heap_p: &&u64, heap_limit: &u64) -> &Shell {
   let shell = mem_allocate(sizeof(Shell), heap_p, heap_limit) as &Shell;
   let command_size = sizeof(Command) - 4 + MAX_COMMAND_LENGTH;
   let command =
@@ -45,7 +45,7 @@ fn sh_new(heap_p: &&u32, heap_limit: &u32) -> &Shell {
   return shell;
 }
 
-fn sh_print(self: &Shell, src: &u32, length: u32) {
+fn sh_print(self: &Shell, src: &u64, length: u64) {
   if length > self.output_limit - self.output_end {
     length = self.output_limit - self.output_end;
   }
@@ -60,9 +60,9 @@ static CANT_LAUNCH = ['C','a','n',''','t',' ','l','a','u','n','c','h',' '];
 static NOT_ENOUGH_MEMORY = ['O','u','t',' ','o','f',' ','m','e','m','o','r','y'];
 static CRASHED = [' ','c','r','a','s','h','e','d'];
 
-const NEW_LINE: u32 = 10;
+const NEW_LINE: u64 = 10;
 
-fn sh_run(self: &Shell, src: &u32, src_end: &u32) {
+fn sh_run(self: &Shell, src: &u64, src_end: &u64) {
   let length = 0;
   let name = sh_read_token(&src, src_end, &length);
   if name == null { return; }
@@ -86,7 +86,7 @@ fn sh_run(self: &Shell, src: &u32, src_end: &u32) {
   }
 }
 
-fn sh_run_script(self: &Shell, name: &u32, length: u32) -> u32 {
+fn sh_run_script(self: &Shell, name: &u64, length: u64) -> u64 {
   let stream = open(name, length, 'r');
   if status(stream) != OK {
     write(STANDARD_OUTPUT, CANT_OPEN, 11);
@@ -122,7 +122,7 @@ fn sh_run_script(self: &Shell, name: &u32, length: u32) -> u32 {
   return status(n);
 }
 
-fn sh_draw_string(src: &u32, src_end: &u32, col: u32, row: &u32) {
+fn sh_draw_string(src: &u64, src_end: &u64, col: u64, row: &u64) {
   let c = 0;
   while src < src_end {
     c = load8(src);
@@ -139,7 +139,7 @@ fn sh_draw_string(src: &u32, src_end: &u32, col: u32, row: &u32) {
   }
 }
 
-fn sh_draw_command(command: &Command, row: &u32) {
+fn sh_draw_command(command: &Command, row: &u64) {
   gpu_draw_char('>');
   sh_draw_string(&command.data, &command.data + command.length, 1, row);
   *row = *row + 1;
@@ -164,14 +164,14 @@ fn sh_draw(self: &Shell, current_command: &Command) {
   gpu_switch_buffer();
 }
 
-const BACKSPACE_KEY: u32 = 8;
-const ENTER_KEY: u32 = 10;
-const ESCAPE_KEY: u32 = 27;
-const DELETE_KEY: u32 = 127;
-const ARROW_UP_KEY: u32 = 245;
-const ARROW_DOWN_KEY: u32 = 242;
+const BACKSPACE_KEY: u64 = 8;
+const ENTER_KEY: u64 = 10;
+const ESCAPE_KEY: u64 = 27;
+const DELETE_KEY: u64 = 127;
+const ARROW_UP_KEY: u64 = 245;
+const ARROW_DOWN_KEY: u64 = 242;
 
-fn sh_run_editor(self: &Shell) -> u32 {
+fn sh_run_editor(self: &Shell) -> u64 {
   gpu_set_double_buffer();
   let current = self.commands;
   let history = current;
@@ -212,7 +212,7 @@ fn sh_run_editor(self: &Shell) -> u32 {
 static BANNER = ['s','r','c','/','s','h','e','l','l','/',
   'b','a','n','n','e','r','.','t','x','t'];
 
-fn main(args: &u32, args_end: &u32, heap: &u32, heap_limit: &u32) -> u32 {
+fn main(args: &u64, args_end: &u64, heap: &u64, heap_limit: &u64) -> u64 {
   let shell = sh_new(&heap, heap_limit);
   if shell == null { return OUT_OF_MEMORY; }
   let length = 0;

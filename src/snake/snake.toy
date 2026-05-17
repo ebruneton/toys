@@ -1,51 +1,51 @@
-const WIDTH: u32 = 50;
-const HEIGHT: u32 = 29;
-const LEFT: u32 = 0;
-const RIGHT: u32 = 1;
-const UP: u32 = 2;
-const DOWN: u32 = 3;
+const WIDTH: u64 = 50;
+const HEIGHT: u64 = 29;
+const LEFT: u64 = 0;
+const RIGHT: u64 = 1;
+const UP: u64 = 2;
+const DOWN: u64 = 3;
 
 struct Game {
-  cell_states: &u32,
-  free_cells: &u32,
-  num_free_cells: u32,
-  head_x: u32,
-  head_y: u32,
-  tail_x: u32,
-  tail_y: u32,
-  apple_x: u32,
-  apple_y: u32,
-  direction: u32,
-  score: u32,
-  seed: u32
+  cell_states: &u64,
+  free_cells: &u64,
+  num_free_cells: u64,
+  head_x: u64,
+  head_y: u64,
+  tail_x: u64,
+  tail_y: u64,
+  apple_x: u64,
+  apple_y: u64,
+  direction: u64,
+  score: u64,
+  seed: u64
 }
 
-fn game_get_cell_state(self: &Game, x: u32, y: u32) -> u32 {
+fn game_get_cell_state(self: &Game, x: u64, y: u64) -> u64 {
   return load16(self.cell_states + 2 * (x + y * WIDTH));
 }
 
-fn game_set_cell_state(self: &Game, x: u32, y: u32, state: u32) {
+fn game_set_cell_state(self: &Game, x: u64, y: u64, state: u64) {
   store16(self.cell_states + 2 * (x + y * WIDTH), state);
 }
 
-fn game_get_free_cell_coords(self: &Game, index: u32, x: &u32, y: &u32) {
+fn game_get_free_cell_coords(self: &Game, index: u64, x: &u64, y: &u64) {
   *x = load8(self.free_cells + 2 * index);
   *y = load8(self.free_cells + 2 * index + 1);
 }
 
-fn game_set_free_cell_coords(self: &Game, index: u32, x: u32, y: u32) {
+fn game_set_free_cell_coords(self: &Game, index: u64, x: u64, y: u64) {
   store8(self.free_cells + 2 * index, x);
   store8(self.free_cells + 2 * index + 1, y);
 }
 
-fn game_free_cell(self: &Game, x: u32, y: u32) {
+fn game_free_cell(self: &Game, x: u64, y: u64) {
   let free_cell_index = self.num_free_cells;
   game_set_cell_state(self, x, y, free_cell_index + 4);
   game_set_free_cell_coords(self, free_cell_index, x, y);
   self.num_free_cells = free_cell_index + 1;
 }
 
-fn game_use_cell(self: &Game, x: u32, y: u32, direction: u32) {
+fn game_use_cell(self: &Game, x: u64, y: u64, direction: u64) {
   let free_cell_index = game_get_cell_state(self, x, y) - 4;
   game_set_cell_state(self, x, y, direction);
   let last_free_cell_index = self.num_free_cells - 1;
@@ -57,7 +57,7 @@ fn game_use_cell(self: &Game, x: u32, y: u32, direction: u32) {
   self.num_free_cells = last_free_cell_index;
 }
 
-fn game_new(heap_p: &&u32, heap_limit: &u32) -> &Game {
+fn game_new(heap_p: &&u64, heap_limit: &u64) -> &Game {
   let game = mem_allocate(sizeof(Game), heap_p, heap_limit) as &Game;
   let cell_states = mem_allocate(2 * WIDTH * HEIGHT, heap_p, heap_limit);
   let free_cells = mem_allocate(2 * WIDTH * HEIGHT, heap_p, heap_limit);
@@ -80,25 +80,25 @@ fn game_new(heap_p: &&u32, heap_limit: &u32) -> &Game {
   return game;
 }
 
-fn random(seed: &u32) -> u32 {
+fn random(seed: &u64) -> u64 {
   *seed = *seed * 1664525 + 1013904223;
   return *seed;
 }
 
-fn modulo(x: u32, m: u32) -> u32 { return x - (x / m) * m; }
+fn modulo(x: u64, m: u64) -> u64 { return x - (x / m) * m; }
 
 fn game_new_apple(self: &Game) {
   let index = modulo(random(&self.seed) >> 21, self.num_free_cells);
   game_get_free_cell_coords(self, index, &self.apple_x, &self.apple_y);
 }
 
-fn gpu_set_background(r: u32, g: u32, b: u32) {
+fn gpu_set_background(r: u64, g: u64, b: u64) {
   gpu_set_register(96 /*Background Color 0*/, r);
   gpu_set_register(97 /*Background Color 1*/, g);
   gpu_set_register(98 /*Background Color 2*/, b);
 }
 
-fn draw_cell(x: u32, y: u32, r: u32, g: u32, b: u32) {
+fn draw_cell(x: u64, y: u64, r: u64, g: u64, b: u64) {
   gpu_set_background(r, g, b);
   gpu_set_cursor(2 * x, y + 1);
   gpu_draw_char(' ');
@@ -109,13 +109,13 @@ fn draw_cell(x: u32, y: u32, r: u32, g: u32, b: u32) {
 static SCORE = ['S','c','o','r','e',':',' '];
 static GAME_OVER = ['G','a','m','e',' ','o','v','e','r','!'];
 
-fn draw_integer(x: u32) {
+fn draw_integer(x: u64) {
   let quotient = x / 10;
   if quotient > 0 { draw_integer(quotient); }
   gpu_draw_char(x - 10 * quotient + '0');
 }
 
-fn draw_string(src: &u32, length: u32) {
+fn draw_string(src: &u64, length: u64) {
   let i = 0;
   while i < length {
     gpu_draw_char(load8(src + i));
@@ -123,7 +123,7 @@ fn draw_string(src: &u32, length: u32) {
   }
 }
 
-fn draw_score(score: u32) {
+fn draw_score(score: u64) {
   gpu_set_cursor(0, 0);
   draw_string(SCORE, 7);
   draw_integer(score);
@@ -147,7 +147,7 @@ fn game_init(self: &Game) {
   draw_score(0);
 }
 
-fn game_update(self: &Game) -> u32 {
+fn game_update(self: &Game) -> u64 {
   let old_head_x = self.head_x;
   let old_head_y = self.head_y;
   if self.direction == LEFT {
@@ -192,13 +192,13 @@ fn game_update(self: &Game) -> u32 {
   return OK;
 }
 
-const ESCAPE_KEY: u32 = 27;
-const ARROW_LEFT_KEY: u32 = 235;
-const ARROW_RIGHT_KEY: u32 = 244;
-const ARROW_UP_KEY: u32 = 245;
-const ARROW_DOWN_KEY: u32 = 242;
+const ESCAPE_KEY: u64 = 27;
+const ARROW_LEFT_KEY: u64 = 235;
+const ARROW_RIGHT_KEY: u64 = 244;
+const ARROW_UP_KEY: u64 = 245;
+const ARROW_DOWN_KEY: u64 = 242;
 
-fn main(args: &u32, args_end: &u32, heap: &u32, heap_limit: &u32) -> u32 {
+fn main(args: &u64, args_end: &u64, heap: &u64, heap_limit: &u64) -> u64 {
   gpu_set_single_buffer();
   gpu_clear_screen();
   gpu_set_register(64 /*Memory Write Control 0*/, 128 /*Hide cursor*/);

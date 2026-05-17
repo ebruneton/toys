@@ -1,6 +1,6 @@
-const NEW_LINE: u32 = 10;
+const NEW_LINE: u64 = 10;
 
-fn line_count(src: &u32, src_end: &u32, last_char: &u32) -> u32 {
+fn line_count(src: &u64, src_end: &u64, last_char: &u64) -> u64 {
   let count = 0;
   while src < src_end {
     if *last_char == NEW_LINE { count = count + 1; }
@@ -10,14 +10,14 @@ fn line_count(src: &u32, src_end: &u32, last_char: &u32) -> u32 {
   return count;
 }
 
-fn write_integer(x: u32) {
+fn write_integer(x: u64) {
   let quotient = x / 10;
   x = x - 10 * quotient + '0';
   if quotient > 0 { write_integer(quotient); }
   write(STANDARD_OUTPUT, &x, 1);
 }
 
-fn write_error(src1: &u32, length1: u32, src2: &u32, length2: u32, result: u32) -> u32 {
+fn write_error(src1: &u64, length1: u64, src2: &u64, length2: u64, result: u64) -> u64 {
   write(STANDARD_OUTPUT, src1, length1);
   write(STANDARD_OUTPUT, src2, length2);
   return status(result);
@@ -31,7 +31,7 @@ static CANT_READ = ['C','a','n',''','t',' ','r','e','a','d',' '];
 static BYTES = [' ','b','y','t','e','s',' '];
 static LINES = [' ','l','i','n','e','s'];
 
-fn main(args: &u32, args_end: &u32, heap: &u32, heap_limit: &u32) -> u32 {
+fn main(args: &u64, args_end: &u64, heap: &u64, heap_limit: &u64) -> u64 {
   let length = 0;
   let name = sh_read_token(&args, args_end, &length);
   if name == null {

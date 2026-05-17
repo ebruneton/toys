@@ -1,11 +1,11 @@
-fn write_integer(x: u32) {
+fn write_integer(x: u64) {
   let quotient = x / 10;
   x = x - 10 * quotient + '0';
   if quotient > 0 { write_integer(quotient); }
   write(STANDARD_OUTPUT, &x, 1);
 }
 
-fn write_error(src1: &u32, length1: u32, src2: &u32, length2: u32, error: u32) -> u32 {
+fn write_error(src1: &u64, length1: u64, src2: &u64, length2: u64, error: u64) -> u64 {
   write(STANDARD_OUTPUT, src1, length1);
   write(STANDARD_OUTPUT, src2, length2);
   return error;
@@ -23,7 +23,7 @@ static ERROR = ['E','r','r','o','r',' '];
 static AT = [' ','a','t',  ' '];
 static IN = [' ','i','n',  ' '];
 
-fn main(args: &u32, args_end: &u32, heap: &u32, heap_limit: &u32) -> u32 {
+fn main(args: &u64, args_end: &u64, heap: &u64, heap_limit: &u64) -> u64 {
   let out_length = 0;
   let in_length = 0;
   let out = sh_read_token(&args, args_end, &out_length);
@@ -32,9 +32,9 @@ fn main(args: &u32, args_end: &u32, heap: &u32, heap_limit: &u32) -> u32 {
     write(STANDARD_OUTPUT, USAGE, 36);
     return INVALID_ARGUMENT;
   }
-  const MAX_CODE_SIZE: u32 = 12288;
-  const MAX_HEAP_SIZE: u32 = 24576;
-  const MIN_SRC_SIZE: u32 = 256;
+  const MAX_CODE_SIZE: u64 = 12288;
+  const MAX_HEAP_SIZE: u64 = 24576;
+  const MIN_SRC_SIZE: u64 = 256;
   heap_limit = heap_limit - 512;
   if heap_limit < heap + MAX_CODE_SIZE + sizeof(Compiler) + MAX_HEAP_SIZE + MIN_SRC_SIZE {
     return OUT_OF_MEMORY;
@@ -43,7 +43,7 @@ fn main(args: &u32, args_end: &u32, heap: &u32, heap_limit: &u32) -> u32 {
   let dst = heap;
   let compiler = (dst + MAX_CODE_SIZE) as &Compiler;
   compiler.dst = dst;
-  compiler.dst_limit = compiler as &u32;
+  compiler.dst_limit = compiler as &u64;
   compiler.heap = compiler.dst_limit + sizeof(Compiler);
   compiler.heap_limit = compiler.heap + MAX_HEAP_SIZE;
   compiler.symbols = null;

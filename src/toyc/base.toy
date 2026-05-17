@@ -1,77 +1,77 @@
-fn panic_result() -> u32 [
+fn panic_result() -> u64 [
   /*MOV_R11_SP*/18155;
   /*MOV_R12_LR*/18164;
   /*MOV_R0_0*/8192;
   /*MOV_PC_LR*/18167;
 ]
 
-fn panic(error: u32) [ /*MOV_SP_R11*/18141; /*MOV_PC_R12*/18151; ]
+fn panic(error: u64) [ /*MOV_SP_R11*/18141; /*MOV_PC_R12*/18151; ]
 
-const TC_INTEGER: u32 = 2;
-const TC_IDENTIFIER: u32 = 3;
-const TC_ADD: u32 = 4;
-const TC_SUB: u32 = 5;
-const TC_MUL: u32 = 6;
-const TC_DIV: u32 = 7;
-const TC_BIT_AND: u32 = 8;
-const TC_BIT_OR: u32 = 9;
-const TC_SHIFT_LEFT: u32 = 10;
-const TC_SHIFT_RIGHT: u32 = 11;
-const TC_LT: u32 = 12;
-const TC_GE: u32 = 17;
-const TC_AND: u32 = 18;
-const TC_OR: u32 = 19;
-const TC_ARROW: u32 = 20;
-const TC_AS: u32 = 138;
-const TC_BREAK: u32 = 128;
-const TC_CONST: u32 = 129;
-const TC_ELSE: u32 = 130;
-const TC_FN: u32 = 131;
-const TC_IF: u32 = 132;
-const TC_LET: u32 = 133;
-const TC_LOOP: u32 = 134;
-const TC_NULL: u32 = 139;
-const TC_RETURN: u32 = 135;
-const TC_SIZEOF: u32 = 140;
-const TC_STATIC: u32 = 136;
-const TC_STRUCT: u32 = 141;
-const TC_U32: u32 = 142;
-const TC_WHILE: u32 = 137;
+const TC_INTEGER: u64 = 2;
+const TC_IDENTIFIER: u64 = 3;
+const TC_ADD: u64 = 4;
+const TC_SUB: u64 = 5;
+const TC_MUL: u64 = 6;
+const TC_DIV: u64 = 7;
+const TC_BIT_AND: u64 = 8;
+const TC_BIT_OR: u64 = 9;
+const TC_SHIFT_LEFT: u64 = 10;
+const TC_SHIFT_RIGHT: u64 = 11;
+const TC_LT: u64 = 12;
+const TC_GE: u64 = 17;
+const TC_AND: u64 = 18;
+const TC_OR: u64 = 19;
+const TC_ARROW: u64 = 20;
+const TC_AS: u64 = 138;
+const TC_BREAK: u64 = 128;
+const TC_CONST: u64 = 129;
+const TC_ELSE: u64 = 130;
+const TC_FN: u64 = 131;
+const TC_IF: u64 = 132;
+const TC_LET: u64 = 133;
+const TC_LOOP: u64 = 134;
+const TC_NULL: u64 = 139;
+const TC_RETURN: u64 = 135;
+const TC_SIZEOF: u64 = 140;
+const TC_STATIC: u64 = 136;
+const TC_STRUCT: u64 = 141;
+const TC_U32: u64 = 142;
+const TC_WHILE: u64 = 137;
 
-const SYM_FN: u32 = 0;
-const SYM_FORWARD_FN: u32 = 1;
-const SYM_VARIABLE: u32 = 2;
-const SYM_CONST: u32 = 3;
-const SYM_STATIC: u32 = 4;
-const SYM_STRUCT: u32 = 5;
-const SYM_FIELD: u32 = 6;
-const SYM_VOID: u32 = 7;
+const SYM_FN: u64 = 0;
+const SYM_FORWARD_FN: u64 = 1;
+const SYM_VARIABLE: u64 = 2;
+const SYM_CONST: u64 = 3;
+const SYM_STATIC: u64 = 4;
+const SYM_STRUCT: u64 = 5;
+const SYM_FIELD: u64 = 6;
+const SYM_VOID: u64 = 7;
 
 struct Symbol {
-  name: &u32,
-  length: u32,
-  kind: u32,
-  value: u32,
+  name: &u64,
+  length: u64,
+  kind: u64,
+  value: u64,
   type: &Symbol,
-  dim: u32,
+  dim: u64,
   next: &Symbol
 }
 
 struct Compiler {
-  src: &u32,
-  src_end: &u32,
-  next_char: u32,
-  next_char_type: u32,
-  next_token: u32,
-  next_token_data: u32,
-  next_token_length: u32,
-  dst: &u32,
-  dst_limit: &u32,
-  heap: &u32,
-  heap_limit: &u32,
+  src: &u64,
+  src_end: &u64,
+  next_char: u64,
+  next_char_type: u64,
+  next_token: u64,
+  next_token_data: u64,
+  next_token_length: u64,
+  dst: &u64,
+  dst_limit: &u64,
+  heap: &u64,
+  heap_limit: &u64,
   symbols: &Symbol,
-  fn_dst: &u32,
+  fn_dst: &u64,
   fn_return_type: &Symbol,
-  next_register: u32,
-  frame_size: u32
+  next_register: u64,
+  frame_size: u64
 }

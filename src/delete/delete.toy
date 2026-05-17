@@ -3,7 +3,7 @@ static USAGE = ['U','s','a','g','e',':',' ',
 
 static CANT_DELETE = ['C','a','n',''','t',' ','d','e','l','e','t','e',' '];
 
-fn main(args: &u32, args_end: &u32, heap: &u32, heap_limit: &u32) -> u32 {
+fn main(args: &u64, args_end: &u64, heap: &u64, heap_limit: &u64) -> u64 {
   let length = 0;
   let name = sh_read_token(&args, args_end, &length);
   if name == null {

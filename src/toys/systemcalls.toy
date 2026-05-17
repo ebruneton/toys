@@ -1,10 +1,10 @@
-fn os_sleep(millis: u32) -> u32 {
+fn os_sleep(millis: u64) -> u64 {
   while millis > 1000 { delay(1000); millis = millis - 1000; }
   delay(millis);
   return OK;
 }
 
-fn os_stat(name: &u32, length: u32) -> u32 {
+fn os_stat(name: &u64, length: u64) -> u64 {
   let process = os_kernel().current_process;
   if process_contains_buffer(process, name, length) == FALSE {
     return error_result(INVALID_ARGUMENT);
@@ -14,13 +14,13 @@ fn os_stat(name: &u32, length: u32) -> u32 {
   return disk_get_file_size(file_block);
 }
 
-const STANDARD_INPUT: u32 = 0;
-const STANDARD_OUTPUT: u32 = 1;
-const KEYBOARD: u32 = 2;
-const GPU: u32 = 3;
-const FIRST_FILE_STREAM_ID: u32 = 4;
+const STANDARD_INPUT: u64 = 0;
+const STANDARD_OUTPUT: u64 = 1;
+const KEYBOARD: u64 = 2;
+const GPU: u64 = 3;
+const FIRST_FILE_STREAM_ID: u64 = 4;
 
-fn process_get_file_stream(self: &Process, stream_id: u32) -> &FileStream {
+fn process_get_file_stream(self: &Process, stream_id: u64) -> &FileStream {
   let stream = self.file_streams;
   let id = FIRST_FILE_STREAM_ID;
   while stream != null && id != stream_id {
@@ -30,7 +30,7 @@ fn process_get_file_stream(self: &Process, stream_id: u32) -> &FileStream {
   return stream;
 }
 
-fn process_get_unused_file_stream(self: &Process, stream_id: &u32) -> &FileStream {
+fn process_get_unused_file_stream(self: &Process, stream_id: &u64) -> &FileStream {
   let stream_ptr = &self.file_streams;
   let stream = *stream_ptr;
   *stream_id = FIRST_FILE_STREAM_ID;
@@ -51,7 +51,7 @@ fn process_get_unused_file_stream(self: &Process, stream_id: &u32) -> &FileStrea
   return stream;
 }
 
-fn process_can_open(self: &Process, file_block: &FileBlock, mode: u32) -> u32 {
+fn process_can_open(self: &Process, file_block: &FileBlock, mode: u64) -> u64 {
   let process = self;
   let stream: &FileStream = null;
   while process != null {
@@ -69,7 +69,7 @@ fn process_can_open(self: &Process, file_block: &FileBlock, mode: u32) -> u32 {
   return TRUE;
 }
 
-fn os_open(name: &u32, length: u32, mode: u32) -> u32 {
+fn os_open(name: &u64, length: u64, mode: u64) -> u64 {
   let process = os_kernel().current_process;
   if process_contains_buffer(process, name, length) == FALSE ||
       mode != MODE_READ && mode != MODE_WRITE {
@@ -108,7 +108,7 @@ fn os_open(name: &u32, length: u32, mode: u32) -> u32 {
   return stream_id;
 }
 
-fn os_read(stream_id: u32, buffer: &u32, size: u32) -> u32 {
+fn os_read(stream_id: u64, buffer: &u64, size: u64) -> u64 {
   let process = os_kernel().current_process;
   if size == 0 || process_contains_buffer(process, buffer, size) == FALSE {
     return error_result(INVALID_ARGUMENT);
@@ -150,7 +150,7 @@ static GPU_SAFE_REGISTERS = [
   4, 0, 1, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0,
   255, 224, 255, 255, 255, 31, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
-fn os_gpu_write(value: u32) {
+fn os_gpu_write(value: u64) {
   let command = value >> 8;
   let register = value & 255;
   let mask = 0;
@@ -162,7 +162,7 @@ fn os_gpu_write(value: u32) {
   spi_transfer(value);
 }
 
-fn os_write(stream_id: u32, buffer: &u32, size: u32) -> u32 {
+fn os_write(stream_id: u64, buffer: &u64, size: u64) -> u64 {
   let process = os_kernel().current_process;
   if process_contains_buffer(process, buffer, size) == FALSE {
     return error_result(INVALID_ARGUMENT);
@@ -194,7 +194,7 @@ fn os_write(stream_id: u32, buffer: &u32, size: u32) -> u32 {
   return size;
 }
 
-fn os_close(stream_id: u32) -> u32 {
+fn os_close(stream_id: u64) -> u64 {
   let process = os_kernel().current_process;
   let stream = process_get_file_stream(process, stream_id);
   if stream == null || stream.mode == MODE_UNUSED {
@@ -205,7 +205,7 @@ fn os_close(stream_id: u32) -> u32 {
   return OK;
 }
 
-fn os_delete(name: &u32, length: u32) -> u32 {
+fn os_delete(name: &u64, length: u64) -> u64 {
   let process = os_kernel().current_process;
   if process_contains_buffer(process, name, length) == FALSE {
     return error_result(INVALID_ARGUMENT);
@@ -231,9 +231,9 @@ fn os_delete(name: &u32, length: u32) -> u32 {
   return OK;
 }
 
-fn os_reboot(mode: u32) -> u32 {
-  const RESET_CONTROL_REGISTER: &u32 = 1074665984;
-  const RESET_COMMAND: u32 = 2768240653;
+fn os_reboot(mode: u64) -> u64 {
+  const RESET_CONTROL_REGISTER: &u64 = 1074665984;
+  const RESET_COMMAND: u64 = 2768240653;
   if mode == 1 { boot_mode_select_rom(); }
   *RESET_CONTROL_REGISTER = RESET_COMMAND;
   return OK;

@@ -1,11 +1,11 @@
-fn mem_allocate(size: u32, heap_p: &&u32, heap_limit: &u32) -> &u32 {
+fn mem_allocate(size: u64, heap_p: &&u64, heap_limit: &u64) -> &u64 {
   let ptr = *heap_p;
-  if size > heap_limit as u32 || ptr > heap_limit - size { return null; }
+  if size > heap_limit as u64 || ptr > heap_limit - size { return null; }
   *heap_p = ptr + size;
   return ptr;
 }
 
-fn mem_copy_non_overlapping(src: &u32, dst: &u32, size: u32) {
+fn mem_copy_non_overlapping(src: &u64, dst: &u64, size: u64) {
   let i = 0;
   while i < size {
     store8(dst + i, load8(src + i));

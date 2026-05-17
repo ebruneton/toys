@@ -1,4 +1,4 @@
-fn write_error(src1: &u32, length1: u32, src2: &u32, length2: u32, result: u32) -> u32 {
+fn write_error(src1: &u64, length1: u64, src2: &u64, length2: u64, result: u64) -> u64 {
   write(STANDARD_OUTPUT, src1, length1);
   write(STANDARD_OUTPUT, src2, length2);
   return status(result);
@@ -11,7 +11,7 @@ static CANT_OPEN = ['C','a','n',''','t',' ','o','p','e','n',' '];
 static CANT_READ = ['C','a','n',''','t',' ','r','e','a','d',' '];
 static CANT_WRITE = ['C','a','n',''','t',' ','w','r','i','t','e',' '];
 
-fn main(args: &u32, args_end: &u32, heap: &u32, heap_limit: &u32) -> u32 {
+fn main(args: &u64, args_end: &u64, heap: &u64, heap_limit: &u64) -> u64 {
   let src_length = 0;
   let dst_length = 0;
   let src_name = sh_read_token(&args, args_end, &src_length);

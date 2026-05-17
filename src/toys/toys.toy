@@ -2,27 +2,27 @@ fn hard_fault_handler() {
   os_exit(INTERNAL_ERROR);
 }
 
-fn call(arg0: u32, arg1: u32, arg2: u32, arg3: u32, arg4: u32, arg5: u32,
-    function: u32) -> u32 [
+fn call(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: u64, arg5: u64,
+    function: u64) -> u64 [
   /*BX_R6*/ 18224;
 ]
 
-const NUM_SYSTEM_CALLS: u32 = 10;
+const NUM_SYSTEM_CALLS: u64 = 10;
 
 static SYSTEM_CALL_ARITY = [6, 1, 1, 2, 3, 3, 3, 1, 2, 1];
 
 struct CallArguments {
-  arg0: u32,
-  arg1: u32,
-  arg2: u32,
-  arg3: u32,
-  arg4: u32,
-  arg5: u32
+  arg0: u64,
+  arg1: u64,
+  arg2: u64,
+  arg3: u64,
+  arg4: u64,
+  arg5: u64
 }
 
 fn supervisor_call_handler() {
   let kernel = os_kernel();
-  let exc_return_ptr = &kernel as &u32 + 4;
+  let exc_return_ptr = &kernel as &u64 + 4;
   let context = (exc_return_ptr + 4) as &Context;
   let process = kernel.current_process;
   if process != null {
@@ -36,7 +36,7 @@ fn supervisor_call_handler() {
   if id < NUM_SYSTEM_CALLS {
     args_size = load8(SYSTEM_CALL_ARITY + id) << 2;
     if process == null ||
-        process_contains_buffer(process, args as &u32, args_size) == TRUE {
+        process_contains_buffer(process, args as &u64, args_size) == TRUE {
       result = call(args.arg0, args.arg1, args.arg2, args.arg3,
           args.arg4, args.arg5, *function_p + 1);
     }
@@ -49,19 +49,19 @@ fn usart_handler() {
   keyboard_handler();
 }
 
-fn os_init(code: &u32, heap: &u32, stack: &u32) {
-  const VECTOR_TABLE_OFFSET_REGISTER: &&u32 = 3758157064;
-  const HARD_FAULT_HANDLER_OFFSET: u32 = 12;
-  const SVC_HANDLER_OFFSET: u32 = 44;
-  const USART_HANDLER_OFFSET: u32 = 132;
+fn os_init(code: &u64, heap: &u64, stack: &u64) {
+  const VECTOR_TABLE_OFFSET_REGISTER: &&u64 = 3758157064;
+  const HARD_FAULT_HANDLER_OFFSET: u64 = 12;
+  const SVC_HANDLER_OFFSET: u64 = 44;
+  const USART_HANDLER_OFFSET: u64 = 132;
   let vector_table = code - 257;
   *(vector_table + HARD_FAULT_HANDLER_OFFSET) = hard_fault_handler + 1;
   *(vector_table + SVC_HANDLER_OFFSET) = supervisor_call_handler + 1;
   *(vector_table + USART_HANDLER_OFFSET) = usart_handler + 1;
   *VECTOR_TABLE_OFFSET_REGISTER = vector_table;
 
-  const MAX_KERNEL_HEAP_SIZE: u32 = 512;
-  const MAX_KERNEL_STACK_SIZE: u32 = 512;
+  const MAX_KERNEL_HEAP_SIZE: u64 = 512;
+  const MAX_KERNEL_STACK_SIZE: u64 = 512;
   let kernel = heap as &Kernel;
   kernel.heap = heap + sizeof(Kernel);
   kernel.heap_limit = heap + MAX_KERNEL_HEAP_SIZE;
@@ -82,17 +82,17 @@ fn os_init(code: &u32, heap: &u32, stack: &u32) {
   clock_init();
   keyboard_init();
   gpu_init();
-  const SVC_HANDLER_PRIORITY_REGISTER: &u32 = 3758157084;
-  const MPU_CONTROL_REGISTER: &u32 = 3758157204;
+  const SVC_HANDLER_PRIORITY_REGISTER: &u64 = 3758157084;
+  const MPU_CONTROL_REGISTER: &u64 = 3758157204;
   *SVC_HANDLER_PRIORITY_REGISTER = 255 << 24;
   *MPU_CONTROL_REGISTER = 5; /*Enable MPU and background region*/
 }
 
-fn system_call(id: u32, args: &u32) [ /*SVC*/ 57088; ]
+fn system_call(id: u64, args: &u64) [ /*SVC*/ 57088; ]
 
-fn spawn(dst: &u32, name: &u32, name_length: u32,
-    args: &u32, args_length: u32, output_p: &&u32) {
-  system_call(0, &dst as &u32);
+fn spawn(dst: &u64, name: &u64, name_length: u64,
+    args: &u64, args_length: u64, output_p: &&u64) {
+  system_call(0, &dst as &u64);
 }
 
 static SHELL = ['s','h','e','l','l'];

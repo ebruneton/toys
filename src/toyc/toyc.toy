@@ -32,10 +32,10 @@ fn main(args: &u64, args_end: &u64, heap: &u64, heap_limit: &u64) -> u64 {
     write(STANDARD_OUTPUT, USAGE, 36);
     return INVALID_ARGUMENT;
   }
-  const MAX_CODE_SIZE: u64 = 12288;
-  const MAX_HEAP_SIZE: u64 = 24576;
+  const MAX_CODE_SIZE: u64 = 20480;
+  const MAX_HEAP_SIZE: u64 = 49152;
   const MIN_SRC_SIZE: u64 = 256;
-  heap_limit = heap_limit - 512;
+  heap_limit = heap_limit - 1024;
   if heap_limit < heap + MAX_CODE_SIZE + sizeof(Compiler) + MAX_HEAP_SIZE + MIN_SRC_SIZE {
     return OUT_OF_MEMORY;
   }

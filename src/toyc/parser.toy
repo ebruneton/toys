@@ -35,7 +35,7 @@ fn tc_add_or_resolve_fn_symbol(self: &Compiler, name: &u64, length: u64, value: 
     return tc_add_symbol(self, name, length, SYM_FN, value, null, 0);
   }
   if symbol.kind != SYM_FORWARD_FN { panic(31); }
-  tc_fill_placeholders(symbol.value as &u64, value);
+  tc_fill_placeholders(symbol.value as &u64, value as &u64);
   symbol.kind = SYM_FN;
   symbol.value = value;
   return symbol;
@@ -111,7 +111,6 @@ fn tc_parse_static(self: &Compiler) {
   }
   tc_parse_token(self, ']');
   tc_parse_token(self, ';');
-  tc_write_padding(self);
 }
 
 fn tc_parse_struct(self: &Compiler) {
@@ -215,7 +214,7 @@ fn tc_parse_fn_arguments(self: &Compiler, function: &Symbol) {
   tc_parse_token(self, '(');
   let next_register = self.next_register;
   if next_register != 0 {
-    tc_save_registers(self, next_register, 0);
+    tc_save_registers(self, next_register);
   }
   let argument_count = 0;
   while self.next_token != ')' {
@@ -234,7 +233,7 @@ fn tc_parse_sizeof_expr(self: &Compiler) {
   let symbol = tc_parse_symbol(self, self.symbols);
   if symbol.kind != SYM_STRUCT { panic(47); }
   tc_push_value(self, FROM_OTHER, 0, null, 0);
-  tc_write_cst_insn(self, symbol.value << 2);
+  tc_write_cst_insn(self, symbol.value * 8);
   tc_parse_token(self, ')');
 }
 
@@ -438,7 +437,7 @@ fn tc_parse_boolean_expr(self: &Compiler, then_refs_p: &&u64) -> &u64 {
   while self.next_token == TC_OR {
     tc_read_token(self);
     tc_write_jump_insn(self, token, then_refs_p);
-    tc_fill_label_placeholders(self, else_refs);
+    tc_fill_placeholders(else_refs, self.dst);
     else_refs = null;
     token = tc_parse_and_expr(self, &else_refs);
   }
@@ -525,10 +524,10 @@ fn tc_parse_while_or_loop_stmt(self: &Compiler) -> u64 {
   if token == TC_WHILE {
     end_refs = tc_parse_boolean_expr(self, &body_refs);
   }
-  tc_fill_label_placeholders(self, body_refs);
+  tc_fill_placeholders(body_refs, self.dst);
   tc_parse_block_stmt(self, &end_refs);
   tc_write_loop_insn(self, loop_dst);
-  tc_fill_label_placeholders(self, end_refs);
+  tc_fill_placeholders(end_refs, self.dst);
   if token == TC_LOOP && end_refs == null { return END_UNREACHABLE; }
   return END_REACHABLE;
 }
@@ -537,7 +536,7 @@ fn tc_parse_if_stmt(self: &Compiler, break_refs_p: &&u64) -> u64 {
   tc_parse_token(self, TC_IF);
   let then_refs: &u64 = null;
   let else_refs = tc_parse_boolean_expr(self, &then_refs);
-  tc_fill_label_placeholders(self, then_refs);
+  tc_fill_placeholders(then_refs, self.dst);
   let state = tc_parse_block_stmt(self, break_refs_p);
   let end_if_refs: &u64 = null;
   if self.next_token == TC_ELSE {
@@ -545,15 +544,15 @@ fn tc_parse_if_stmt(self: &Compiler, break_refs_p: &&u64) -> u64 {
     if state == END_REACHABLE {
       tc_write_goto_insn(self, &end_if_refs);
     }
-    tc_fill_label_placeholders(self, else_refs);
+    tc_fill_placeholders(else_refs, self.dst);
     if self.next_token == '{' {
       state = state | tc_parse_block_stmt(self, break_refs_p);
     } else {
       state = state | tc_parse_if_stmt(self, break_refs_p);
     }
-    tc_fill_label_placeholders(self, end_if_refs);
+    tc_fill_placeholders(end_if_refs, self.dst);
   } else {
-    tc_fill_label_placeholders(self, else_refs);
+    tc_fill_placeholders(else_refs, self.dst);
     state = END_REACHABLE;
   }
   return state;
@@ -596,17 +595,14 @@ fn tc_parse_let_stmt(self: &Compiler, variable: u64) -> u64 {
     dim = value.dim;
   }
   tc_add_symbol(self, name, length, SYM_VARIABLE, variable, type, dim);
-  tc_save_registers(self, 1, 0);
+  tc_save_registers(self, 1);
   return variable + 1;
 }
 
 fn tc_parse_fn_name(self: &Compiler) -> &Symbol {
   let length = 0;
   let name = tc_parse_identifier(self, &length);
-  let fn_dst = self.dst;
-  self.fn_dst = fn_dst;
-  let value = tc_get_fn_value(self, fn_dst as u64);
-  return tc_add_or_resolve_fn_symbol(self, name, length, value);
+  return tc_add_or_resolve_fn_symbol(self, name, length, self.dst as u64);
 }
 
 fn tc_check_fn_parameters(forward_parameters: &Symbol, parameters: &Symbol) {
@@ -654,16 +650,12 @@ fn tc_parse_fn_parameters(self: &Compiler, function: &Symbol) -> u64 {
 }
 
 fn tc_parse_fn_asm_body(self: &Compiler) {
-  let value = 0;
+  let i = 0;
   tc_parse_token(self, '[');
   while self.next_token != ']' {
-    value = tc_parse_integer(self);
-    if (value >> 11) & 31 > 28 {
-      tc_write32(self, value);
-    } else {
-      tc_write16(self, value);
-    }
-    tc_parse_token(self, ';');
+    if i > 0 { tc_parse_token(self, ','); }
+    tc_write8(self, tc_parse_integer(self));
+    i = i + 1;
   }
   tc_read_token(self);
 }

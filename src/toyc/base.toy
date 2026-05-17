@@ -1,11 +1,15 @@
 fn panic_result() -> u64 [
-  /*MOV_R11_SP*/18155;
-  /*MOV_R12_LR*/18164;
-  /*MOV_R0_0*/8192;
-  /*MOV_PC_LR*/18167;
+  72,139,52,36,   /*mov rsi,[rsp]*/
+  72,137,231,     /*mov rdi,rsp*/
+  65,184,0,0,0,0, /*mov r8d,0*/
+  195             /*ret*/
 ]
 
-fn panic(error: u64) [ /*MOV_SP_R11*/18141; /*MOV_PC_R12*/18151; ]
+fn panic(error: u64) [
+  72,137,252,   /*mov rsp,rdi*/
+  72,137,52,36, /*mov [rsp],rsi*/
+  195           /*ret*/
+]
 
 const TC_INTEGER: u64 = 2;
 const TC_IDENTIFIER: u64 = 3;
@@ -66,11 +70,11 @@ struct Compiler {
   next_token_data: u64,
   next_token_length: u64,
   dst: &u64,
+  dst_mark: &u64,
   dst_limit: &u64,
   heap: &u64,
   heap_limit: &u64,
   symbols: &Symbol,
-  fn_dst: &u64,
   fn_return_type: &Symbol,
   next_register: u64,
   frame_size: u64
